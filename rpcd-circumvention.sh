@@ -293,6 +293,16 @@ generate_singbox_config() {
       {
         "ip_is_private": true,
         "outbound": "direct"
+      },
+      {
+        "ip_cidr": [
+          "66.22.192.0/18",
+          "162.159.128.0/20",
+          "162.159.192.0/20",
+          "147.160.192.0/19",
+          "199.19.224.0/21"
+        ],
+        "outbound": "proxy"
       }$([ -n "$CLEAN_BLOCKED" ] && echo ",
       {
         \"domain_suffix\": $BLOCKED_JSON,
@@ -335,7 +345,7 @@ generate_singbox_config() {
     ],
     "rules": [
       {
-        "domain_suffix": [ ".ru", ".su", ".xn--p1ai", "yandex.ru", "ya.ru" ],
+        "domain_suffix": [ ".ru", ".su", ".xn--p1ai", "yandex.ru", "ya.ru", "yandex.net", "ya.net", "yastatic.net", "yastat.net", "yastatic-net.ru", "strm.yandex.net", "avatars.mds.yandex.net", "storage.mds.yandex.net", "userapi.com", "vk.com", "dzen.ru", "kinopoisk.ru" ],
         "server": "yandex"
       }
     ],

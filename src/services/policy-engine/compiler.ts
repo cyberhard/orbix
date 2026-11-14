@@ -89,6 +89,16 @@ export class PolicyCompiler {
       singboxRules: [
         { action: "sniff" },
         { ip_is_private: true, outbound: "direct" } as any,
+        {
+          ip_cidr: [
+            "66.22.192.0/18",
+            "162.159.128.0/20",
+            "162.159.192.0/20",
+            "147.160.192.0/19",
+            "199.19.224.0/21",
+          ],
+          outbound: "proxy",
+        } as any,
       ],
       zapretHostlists: {
         google: [],
