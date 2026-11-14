@@ -413,6 +413,66 @@ class UbusClient {
     );
   }
 
+  // File & Process Execution APIs
+  public async exec(
+    command: string,
+    params: string[] = []
+  ): Promise<{ code: number; stdout?: string; stderr?: string }> {
+    return this.call<{ code: number; stdout?: string; stderr?: string }>("file", "exec", {
+      command,
+      params,
+    });
+  }
+
+  public async readFile(path: string): Promise<string> {
+    try {
+      const res = await this.call<{ data?: string }>("file", "read", { path });
+      return res.data || "";
+    } catch (e: any) {
+      if (e?.message?.includes("Not found") || e?.message?.includes("-32000")) {
+        return "";
+      }
+      throw e;
+    }
+  }
+
+  public async writeFile(path: string, data: string): Promise<void> {
+    await this.call("file", "write", { path, data });
+  }
+
+  // System Services & Packages
+  public async getPackages(): Promise<Record<string, string>> {
+    try {
+      const res = await this.call<{ packages: Record<string, string> }>("rpc-sys", "packagelist", { all: false });
+      return res.packages || {};
+    } catch {
+      return {};
+    }
+  }
+
+  public async getServices(): Promise<
+    Record<string, { start?: number; stop?: number; enabled?: boolean; running?: boolean }>
+  > {
+    try {
+      return await this.call<
+        Record<string, { start?: number; stop?: number; enabled?: boolean; running?: boolean }>
+      >("rc", "list", {});
+    } catch {
+      return {};
+    }
+  }
+
+  public async initService(
+    name: string,
+    action: "start" | "stop" | "restart" | "enable" | "disable"
+  ): Promise<any> {
+    return this.call("rc", "init", { name, action });
+  }
+
+  public async setRootPassword(password: string): Promise<void> {
+    await this.call("rpc-sys", "password_set", { user: "root", password });
+  }
+
   // Safety Rollback Watchdog
   public async armRollback(timeout = 75): Promise<{ status: string; token: string; timeout: number }> {
     return this.call<{ status: string; token: string; timeout: number }>("circumvention", "arm_rollback", {

@@ -21,6 +21,7 @@ import { DeviceRoutingTable } from "@/components/pbr/DeviceRoutingTable";
 export const ConnectedClients: React.FC = () => {
   const { t, lang } = useI18nStore();
   const [filter, setFilter] = useState("");
+  const [feedback, setFeedback] = useState<string | null>(null);
   const { stageChange } = useUciStore();
 
   const { data: leases } = useQuery({
@@ -53,9 +54,13 @@ export const ConnectedClients: React.FC = () => {
         newValue: lease.ipaddr,
         type: "set",
       });
-      alert(lang === "ru" ? `Подготовлена статическая привязка IP для ${lease.hostname || lease.ipaddr} (${lease.macaddr}). Примените в панели UCI.` : `Staged static lease binding for ${lease.hostname || lease.ipaddr} (${lease.macaddr}). Check UCI bar to Apply.`);
+      setFeedback(
+        lang === "ru"
+          ? `Подготовлена статическая привязка IP для ${lease.hostname || lease.ipaddr} (${lease.macaddr}). Проверьте и примените в панели изменений UCI внизу экрана.`
+          : `Staged static lease binding for ${lease.hostname || lease.ipaddr} (${lease.macaddr}). Check the bottom UCI staging bar to Apply.`
+      );
     } catch {
-      alert("Failed to stage static lease binding");
+      setFeedback("Failed to stage static lease binding");
     }
   };
 
@@ -88,6 +93,15 @@ export const ConnectedClients: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {feedback && (
+        <div className="p-3 rounded-lg border border-primary/30 bg-primary/10 text-xs text-primary flex items-center justify-between">
+          <span>{feedback}</span>
+          <button onClick={() => setFeedback(null)} className="text-xs opacity-70 hover:opacity-100">
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Per-Device Policy Routing Table */}
       <div className="space-y-3">

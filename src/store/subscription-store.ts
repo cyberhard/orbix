@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { ubusClient } from "@/lib/ubus-client";
-import { VlessNode, SubscriptionMetadata } from "@/types/ubus";
+import { VlessNode, SubscriptionMetadata, VpnOutboundGroup, KillSwitchConfig } from "@/types/ubus";
 
 const DEFAULT_METADATA: SubscriptionMetadata = {
   profileTitle: "Liberty VPN 🛡️",
@@ -15,6 +15,25 @@ const DEFAULT_METADATA: SubscriptionMetadata = {
   selectionMode: "manual",
 };
 
+const DEFAULT_VPN_GROUPS: VpnOutboundGroup[] = [
+  {
+    id: "group-europe",
+    name: "Europe Fast Path (DE/FI/NL)",
+    nameRu: "Европа (Финляндия / Швейцария)",
+    mode: "lowest_latency",
+    nodeIds: [],
+    healthStatus: "healthy",
+  },
+  {
+    id: "group-backup",
+    name: "Backup Failover Pool",
+    nameRu: "Резервный пул (Failover)",
+    mode: "failover",
+    nodeIds: [],
+    healthStatus: "healthy",
+  },
+];
+
 interface SubscriptionState {
   url: string;
   decryptedUrl: string;
@@ -22,6 +41,8 @@ interface SubscriptionState {
   metadata: SubscriptionMetadata;
   nodes: VlessNode[];
   activeNodeId: string;
+  outboundGroups: VpnOutboundGroup[];
+  killSwitch: KillSwitchConfig;
   isSyncing: boolean;
   isTestingLatency: boolean;
   error: string | null;
@@ -37,6 +58,13 @@ interface SubscriptionState {
   testAllLatencies: () => Promise<void>;
   deleteNode: (nodeId: string) => void;
   deleteSubscription: () => void;
+
+  // Groups & KillSwitch
+  createGroup: (group: Omit<VpnOutboundGroup, "id">) => void;
+  updateGroup: (id: string, updates: Partial<VpnOutboundGroup>) => void;
+  deleteGroup: (id: string) => void;
+  toggleKillSwitch: (enabled?: boolean) => Promise<boolean>;
+  setKillSwitchScope: (scope: "all" | "vpn_devices") => void;
 }
 
 export const useSubscriptionStore = create<SubscriptionState>()(
@@ -48,6 +76,12 @@ export const useSubscriptionStore = create<SubscriptionState>()(
       metadata: DEFAULT_METADATA,
       nodes: [],
       activeNodeId: "",
+      outboundGroups: DEFAULT_VPN_GROUPS,
+      killSwitch: {
+        enabled: false,
+        scope: "vpn_devices",
+        allowLan: true,
+      },
       isSyncing: false,
       isTestingLatency: false,
       error: null,
@@ -376,6 +410,41 @@ export const useSubscriptionStore = create<SubscriptionState>()(
           error: null,
         });
       },
+
+      createGroup: (group) => {
+        const id = `group-${Date.now()}`;
+        set((state) => ({
+          outboundGroups: [...state.outboundGroups, { ...group, id }],
+        }));
+      },
+
+      updateGroup: (id, updates) => {
+        set((state) => ({
+          outboundGroups: state.outboundGroups.map((g) =>
+            g.id === id ? { ...g, ...updates } : g
+          ),
+        }));
+      },
+
+      deleteGroup: (id) => {
+        set((state) => ({
+          outboundGroups: state.outboundGroups.filter((g) => g.id !== id),
+        }));
+      },
+
+      toggleKillSwitch: async (enabled) => {
+        const nextEnabled = enabled !== undefined ? enabled : !get().killSwitch.enabled;
+        set((state) => ({
+          killSwitch: { ...state.killSwitch, enabled: nextEnabled },
+        }));
+        return true;
+      },
+
+      setKillSwitchScope: (scope) => {
+        set((state) => ({
+          killSwitch: { ...state.killSwitch, scope },
+        }));
+      },
     }),
     {
       name: "happ-subscription-storage",
@@ -385,6 +454,8 @@ export const useSubscriptionStore = create<SubscriptionState>()(
         metadata: state.metadata,
         activeNodeId: state.activeNodeId,
         nodes: state.nodes,
+        outboundGroups: state.outboundGroups,
+        killSwitch: state.killSwitch,
       }),
     }
   )

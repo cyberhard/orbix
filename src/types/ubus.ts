@@ -289,6 +289,25 @@ export interface HappSubscriptionData {
   rateLimitUntil?: number; // timestamp when 429 lock clears
 }
 
+// VPN Outbound Groups & Failover
+export interface VpnOutboundGroup {
+  id: string;
+  name: string;
+  nameRu: string;
+  mode: "lowest_latency" | "failover" | "manual";
+  nodeIds: string[];
+  activeNodeId?: string;
+  healthStatus?: "healthy" | "degraded" | "down";
+  lastCheckTimestamp?: number;
+}
+
+export interface KillSwitchConfig {
+  enabled: boolean;
+  scope: "all" | "vpn_devices";
+  allowLan: boolean; // Preserves 192.168.1.1 router admin access
+  activeDropRulesCount?: number;
+}
+
 export interface RollbackState {
   isArmed: boolean;
   token: string | null;

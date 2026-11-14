@@ -2,50 +2,117 @@ import React, { useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Terminal, Play } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Terminal, Play, Loader2, Sparkles, AlertCircle } from "lucide-react";
+import { ubusClient } from "@/lib/ubus-client";
+import { useI18nStore } from "@/store/i18n-store";
+
+const PRESETS = [
+  { label: "1.1.1.1 (Cloudflare)", host: "1.1.1.1" },
+  { label: "77.88.8.8 (Yandex RuNet)", host: "77.88.8.8" },
+  { label: "google.com (Global WAN)", host: "google.com" },
+  { label: "googlevideo.com (YouTube)", host: "googlevideo.com" },
+  { label: "discord.com (Voice/DPI)", host: "discord.com" },
+  { label: "dns-ai.ru (Smart DNS)", host: "dns-ai.ru" },
+];
 
 export const Diagnostics: React.FC = () => {
   const [target, setTarget] = useState("1.1.1.1");
   const [tool, setTool] = useState<"ping" | "traceroute" | "nslookup">("ping");
   const [output, setOutput] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [exitCode, setExitCode] = useState<number | null>(null);
+  const { lang } = useI18nStore();
 
-  const handleRun = async () => {
+  const handleRun = async (overrideTarget?: string) => {
+    const hostToTest = (overrideTarget || target).trim();
+    if (!hostToTest) return;
+
+    // Sanitize target against shell characters
+    const cleanHost = hostToTest.replace(/[^a-zA-Z0-9.-]/g, "");
+    if (!cleanHost) {
+      setOutput("Error: Invalid hostname or IP address format.");
+      return;
+    }
+
     setIsRunning(true);
     setOutput(null);
-    await new Promise((r) => setTimeout(r, 700));
+    setExitCode(null);
 
-    if (tool === "ping") {
-      setOutput(
-        `PING ${target} (${target}): 56 data bytes\n` +
-          `64 bytes from ${target}: seq=0 ttl=55 time=32.9 ms\n` +
-          `64 bytes from ${target}: seq=1 ttl=55 time=33.1 ms\n` +
-          `64 bytes from ${target}: seq=2 ttl=55 time=32.8 ms\n\n` +
-          `--- ${target} ping statistics ---\n` +
-          `3 packets transmitted, 3 packets received, 0% packet loss\n` +
-          `round-trip min/avg/max = 32.8/32.9/33.1 ms`
-      );
-    } else if (tool === "traceroute") {
-      setOutput(
-        `traceroute to ${target} (1.1.1.1), 30 hops max, 38 byte packets\n` +
-          ` 1  10.193.76.1 (10.193.76.1)  1.214 ms  0.982 ms  0.871 ms\n` +
-          ` 2  195.175.12.1 (195.175.12.1)  4.321 ms  3.982 ms  4.112 ms\n` +
-          ` 3  one.one.one.one (1.1.1.1)  32.894 ms  32.912 ms  32.784 ms`
-      );
-    } else {
-      setOutput(
-        `Server:    127.0.0.1\nAddress:   127.0.0.1#53\n\n` +
-          `Name:      ${target}\nAddress 1: 104.16.132.229\nAddress 2: 104.16.133.229`
-      );
+    try {
+      let cmd = "ping";
+      let params: string[] = [];
+
+      if (tool === "ping") {
+        cmd = "ping";
+        params = ["-c", "4", "-W", "2", cleanHost];
+      } else if (tool === "traceroute") {
+        cmd = "traceroute";
+        params = ["-q", "1", "-w", "2", "-m", "15", cleanHost];
+      } else {
+        cmd = "nslookup";
+        params = [cleanHost];
+      }
+
+      const res = await ubusClient.exec(cmd, params);
+      setExitCode(res.code);
+
+      const combinedOutput = [res.stdout, res.stderr].filter(Boolean).join("\n").trim();
+      setOutput(combinedOutput || `(Command finished with exit code ${res.code} and no output)`);
+    } catch (err: any) {
+      setExitCode(-1);
+      setOutput(`Execution error: ${err.message || String(err)}`);
+    } finally {
+      setIsRunning(false);
     }
-    setIsRunning(false);
   };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-base font-bold text-foreground">Network Diagnostics</h2>
-        <p className="text-xs text-muted-foreground">ICMP Ping, UDP/ICMP Traceroute, and DNS resolution directly from router</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-base font-bold text-foreground">
+            {lang === "ru" ? "Диагностика сети" : "Network Diagnostics"}
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            {lang === "ru"
+              ? "Реальный ICMP Ping, UDP Traceroute и DNS-резолв прямо из ядра роутера"
+              : "Live ICMP Ping, UDP Traceroute, and DNS lookup directly from OpenWrt router"}
+          </p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Badge variant="outline" className="text-[10px] font-mono text-zinc-400">
+            host: 192.168.1.1
+          </Badge>
+          {exitCode !== null && (
+            <Badge
+              variant={exitCode === 0 ? "outline" : "destructive"}
+              className="text-[10px] font-mono"
+            >
+              code: {exitCode}
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      {/* Preset pills */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-muted-foreground flex items-center gap-1">
+          <Sparkles className="h-3 w-3 text-amber-400" />
+          {lang === "ru" ? "Быстрые цели:" : "Presets:"}
+        </span>
+        {PRESETS.map((p) => (
+          <button
+            key={p.host}
+            onClick={() => {
+              setTarget(p.host);
+              handleRun(p.host);
+            }}
+            className="text-xs px-2.5 py-1 rounded-md border border-zinc-800 bg-zinc-900/70 hover:bg-zinc-800 hover:text-zinc-100 text-zinc-300 transition-colors"
+          >
+            {p.label}
+          </button>
+        ))}
       </div>
 
       <Card>
@@ -84,26 +151,48 @@ export const Diagnostics: React.FC = () => {
                 onChange={(e) => setTarget(e.target.value)}
                 placeholder="Target Host / IP..."
                 className="h-8 text-xs font-mono w-48 sm:w-64"
-                onKeyDown={(e) => e.key === "Enter" && handleRun()}
+                onKeyDown={(e) => e.key === "Enter" && !isRunning && handleRun()}
               />
               <Button
                 variant="default"
                 size="sm"
-                onClick={handleRun}
+                onClick={() => handleRun()}
                 disabled={isRunning}
                 className="h-8 text-xs gap-1.5"
               >
-                <Play className="h-3.5 w-3.5" />
-                {isRunning ? "Running..." : "Run"}
+                {isRunning ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>{lang === "ru" ? "Выполняется..." : "Running..."}</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-3.5 w-3.5" />
+                    <span>{lang === "ru" ? "Запустить" : "Run"}</span>
+                  </>
+                )}
               </Button>
             </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="h-72 w-full overflow-y-auto bg-black/60 font-mono text-xs p-4 text-emerald-400 whitespace-pre-wrap">
-            {output || (
-              <span className="text-muted-foreground">
-                Enter an IP address or hostname and press Run to execute {tool}.
+          <div className="h-80 w-full overflow-y-auto bg-black/80 font-mono text-xs p-4 text-emerald-400 whitespace-pre-wrap selection:bg-emerald-800">
+            {isRunning ? (
+              <div className="flex items-center gap-2 text-zinc-400">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <span>
+                  {lang === "ru"
+                    ? `Выполняется команда ${tool} ${target} на роутере...`
+                    : `Executing ${tool} ${target} on router...`}
+                </span>
+              </div>
+            ) : output ? (
+              output
+            ) : (
+              <span className="text-zinc-500">
+                {lang === "ru"
+                  ? `Введите адрес или выберите цель выше и нажмите "Запустить".`
+                  : `Enter an IP address or hostname and press Run to execute ${tool}.`}
               </span>
             )}
           </div>

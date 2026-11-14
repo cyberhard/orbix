@@ -59,9 +59,15 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ onSelectRoute, i
   const items: CommandItem[] = [
     // Status
     { id: "overview", title: t.nav.overview, category: t.nav.statusMonitoring, icon: <Activity className="h-4 w-4" />, action: () => onSelectRoute("overview") },
+    { id: "traffic", title: t.nav.trafficTopology, category: t.nav.statusMonitoring, icon: <Activity className="h-4 w-4 text-cyan-400" />, action: () => onSelectRoute("traffic") },
+    { id: "explain", title: t.nav.explainRoute, category: t.nav.statusMonitoring, icon: <Activity className="h-4 w-4 text-indigo-400" />, action: () => onSelectRoute("explain") },
     { id: "bandwidth", title: t.nav.realtimeGraphs, category: t.nav.statusMonitoring, icon: <Activity className="h-4 w-4" />, action: () => onSelectRoute("bandwidth") },
     { id: "clients", title: t.nav.connectedClients, category: t.nav.statusMonitoring, icon: <Network className="h-4 w-4" />, action: () => onSelectRoute("clients") },
     { id: "logs", title: t.nav.systemLogs, category: t.nav.statusMonitoring, icon: <Terminal className="h-4 w-4" />, action: () => onSelectRoute("logs") },
+    // Policies & Lists
+    { id: "policies", title: t.nav.unifiedPolicies, category: t.nav.policyControl, icon: <Sliders className="h-4 w-4 text-amber-400" />, action: () => onSelectRoute("policies") },
+    { id: "lists", title: t.nav.categoryFeeds, category: t.nav.policyControl, icon: <Layers className="h-4 w-4 text-emerald-400" />, action: () => onSelectRoute("lists") },
+    { id: "dns", title: t.nav.dnsCenter, category: t.nav.policyControl, icon: <Globe className="h-4 w-4 text-blue-400" />, action: () => onSelectRoute("dns") },
     // Circumvention & VPN
     { id: "vpn-awg", title: `AmneziaWG (AWG) - ${t.nav.vpnManager}`, category: t.nav.circumventionVpn, icon: <Shield className="h-4 w-4" />, action: () => onSelectRoute("vpn") },
     { id: "subscriptions", title: t.nav.subscriptions, category: t.nav.circumventionVpn, icon: <Globe className="h-4 w-4" />, action: () => onSelectRoute("subscriptions") },

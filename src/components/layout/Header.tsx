@@ -2,6 +2,7 @@ import React from "react";
 import { useThemeStore } from "@/store/theme-store";
 import { useAuthStore } from "@/store/auth-store";
 import { useI18nStore } from "@/store/i18n-store";
+import { usePolicyStore } from "@/store/policy-store";
 import { ubusClient } from "@/lib/ubus-client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,8 @@ import {
   Power,
   LogOut,
   Languages,
+  Sparkles,
+  SlidersHorizontal,
 } from "lucide-react";
 
 interface HeaderProps {
@@ -29,6 +32,7 @@ export const Header: React.FC<HeaderProps> = ({
   const { theme, toggleTheme } = useThemeStore();
   const { logout } = useAuthStore();
   const { lang, toggleLang, t } = useI18nStore();
+  const { operatingMode, setOperatingMode } = usePolicyStore();
   const [isRebooting, setIsRebooting] = React.useState(false);
 
   const handleReboot = async () => {
@@ -86,6 +90,27 @@ export const Header: React.FC<HeaderProps> = ({
             ⌘K
           </kbd>
         </button>
+
+        {/* Operating Mode Switcher */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setOperatingMode(operatingMode === "simple" ? "expert" : "simple")}
+          className="h-8 px-2 sm:px-2.5 text-xs font-medium gap-1.5 border-zinc-800 bg-zinc-900/70 text-zinc-200 hover:bg-zinc-850 hover:text-zinc-100"
+          title={operatingMode === "simple" ? "Переключиться в экспертный режим" : "Переключиться в простой режим"}
+        >
+          {operatingMode === "simple" ? (
+            <>
+              <Sparkles className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+              <span className="hidden sm:inline text-[11px]">{t.common.simpleMode}</span>
+            </>
+          ) : (
+            <>
+              <SlidersHorizontal className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+              <span className="hidden sm:inline text-[11px]">{t.common.expertMode}</span>
+            </>
+          )}
+        </Button>
 
         {/* Language Switcher */}
         <Button
