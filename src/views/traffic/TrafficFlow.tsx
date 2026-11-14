@@ -1508,7 +1508,7 @@ export const TrafficFlow: React.FC = () => {
                         selectedNode.securityStatus === "vpn"
                           ? "border-emerald-500/50 text-emerald-400 bg-emerald-500/10"
                           : selectedNode.securityStatus === "zapret"
-                          ? "border-purple-500/50 text-purple-400 bg-purple-500/10"
+                          ? "border-zinc-700 text-zinc-300 bg-zinc-900"
                           : "border-border text-muted-foreground"
                       }`}
                     >
@@ -1544,14 +1544,14 @@ export const TrafficFlow: React.FC = () => {
                       selectedNode.securityStatus === "vpn"
                         ? "border-emerald-500/40 bg-emerald-950/20 text-emerald-300"
                         : selectedNode.securityStatus === "zapret"
-                        ? "border-purple-500/40 bg-purple-950/20 text-purple-300"
+                        ? "border-zinc-700 bg-zinc-900 text-zinc-200"
                         : "border-border bg-muted/30 text-foreground"
                     }`}
                   >
                     {selectedNode.securityStatus === "vpn" ? (
                       <ShieldCheck className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
                     ) : selectedNode.securityStatus === "zapret" ? (
-                      <Zap className="h-5 w-5 text-purple-400 shrink-0 mt-0.5" />
+                      <Zap className="h-5 w-5 text-zinc-300 shrink-0 mt-0.5" />
                     ) : (
                       <Globe className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
                     )}

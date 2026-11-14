@@ -557,7 +557,7 @@ export const VpnManager: React.FC = () => {
         <div className="space-y-6">
           {/* Hero Protection Status Banner */}
           <Card className="border-zinc-800 bg-zinc-950 shadow-2xl relative overflow-hidden">
-            <div className={`absolute top-0 left-0 right-0 h-1 ${simpleProtectionEnabled ? "bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500" : "bg-zinc-700"}`} />
+            <div className={`absolute top-0 left-0 right-0 h-0.5 ${simpleProtectionEnabled ? "bg-emerald-500" : "bg-zinc-800"}`} />
             <CardContent className="pt-6 pb-6">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div className="flex items-center gap-4">
@@ -636,7 +636,7 @@ export const VpnManager: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
-                  <Globe className="h-4 w-4 text-cyan-400" />
+                  <Globe className="h-4 w-4 text-zinc-400" />
                   <span>{isRu ? "Выбор страны и локации сервера" : "Country & Server Location"}</span>
                 </h3>
                 <p className="text-xs text-zinc-400 mt-0.5">
@@ -777,7 +777,7 @@ export const VpnManager: React.FC = () => {
                 </div>
                 <div className="flex items-center justify-between p-2 rounded bg-zinc-900/60 border border-zinc-800/80 text-[11px]">
                   <span className="text-zinc-300">Заблокированные сайты и сервисы AI</span>
-                  <Badge variant="outline" className="border-cyan-800 text-cyan-400 font-mono text-[9px]">
+                  <Badge variant="outline" className="border-zinc-800 text-zinc-300 font-mono text-[9px]">
                     {currentCountry.flag} Через туннель
                   </Badge>
                 </div>
@@ -803,11 +803,11 @@ export const VpnManager: React.FC = () => {
               AmneziaWG
             </TabsTrigger>
             <TabsTrigger value="vless" className="text-xs gap-1.5 py-1.5">
-              <Globe className="h-3.5 w-3.5 text-cyan-400" />
+              <Globe className="h-3.5 w-3.5 text-zinc-400" />
               Sing-box Reality
             </TabsTrigger>
             <TabsTrigger value="groups" className="text-xs gap-1.5 py-1.5">
-              <Layers className="h-3.5 w-3.5 text-purple-400" />
+              <Layers className="h-3.5 w-3.5 text-zinc-400" />
               {isRu ? "Группы Failover" : "Outbound Groups"}
             </TabsTrigger>
             <TabsTrigger value="killswitch" className="text-xs gap-1.5 py-1.5">
@@ -1083,7 +1083,7 @@ export const VpnManager: React.FC = () => {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                      <Globe className="h-4 w-4 text-cyan-400" />
+                      <Globe className="h-4 w-4 text-zinc-400" />
                       <span>Sing-box Reality (VLESS xtls-rprx-vision)</span>
                     </CardTitle>
                     <CardDescription className="text-xs text-zinc-400">
@@ -1169,7 +1169,7 @@ export const VpnManager: React.FC = () => {
                               <div className="flex items-center gap-2 text-[11px] text-zinc-400 font-mono mt-0.5">
                                 <span>{node.server}:{node.port}</span>
                                 <span>•</span>
-                                <span className="uppercase text-cyan-400">{node.transport}</span>
+                                <span className="uppercase text-zinc-300">{node.transport}</span>
                                 <span>•</span>
                                 <span className="text-emerald-400 uppercase">{node.security}</span>
                               </div>
@@ -1219,15 +1219,15 @@ export const VpnManager: React.FC = () => {
                           </div>
                           <div className="p-2 rounded bg-zinc-950 border border-zinc-800/80">
                             <span className="text-zinc-500 block">Short ID:</span>
-                            <span className="text-cyan-300">{node.shortId || "6ba85179e30d"}</span>
+                            <span className="text-zinc-300">{node.shortId || "6ba85179e30d"}</span>
                           </div>
                           <div className="p-2 rounded bg-zinc-950 border border-zinc-800/80">
                             <span className="text-zinc-500 block">Fingerprint:</span>
-                            <span className="text-amber-300">{node.fingerprint || "chrome"}</span>
+                            <span className="text-zinc-300">{node.fingerprint || "chrome"}</span>
                           </div>
                           <div className="p-2 rounded bg-zinc-950 border border-zinc-800/80">
                             <span className="text-zinc-500 block">SNI Mask:</span>
-                            <span className="text-purple-300">{node.sni || "yahoo.com"}</span>
+                            <span className="text-zinc-300">{node.sni || "yahoo.com"}</span>
                           </div>
                         </div>
                       </div>
@@ -1245,7 +1245,7 @@ export const VpnManager: React.FC = () => {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <CardTitle className="text-xs font-semibold text-zinc-200 flex items-center gap-2">
-                      <Layers className="h-4 w-4 text-purple-400" />
+                      <Layers className="h-4 w-4 text-zinc-400" />
                       <span>{isRu ? "Группы исходящих туннелей (Outbound Groups)" : "Outbound Tunnel Groups"}</span>
                     </CardTitle>
                     <CardDescription className="text-[11px] text-zinc-400">
@@ -1275,7 +1275,7 @@ export const VpnManager: React.FC = () => {
                           <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
                           <span className="font-semibold text-xs text-zinc-100">{isRu ? g.nameRu : g.name}</span>
                         </div>
-                        <Badge variant="outline" className="text-[10px] font-mono bg-zinc-950 border-zinc-800 text-purple-300">
+                        <Badge variant="outline" className="text-[10px] font-mono bg-zinc-950 border-zinc-800 text-zinc-300">
                           {g.mode === "lowest_latency" ? (isRu ? "Мин. пинг" : "Fastest") : (isRu ? "Failover резерв" : "Failover")}
                         </Badge>
                       </div>

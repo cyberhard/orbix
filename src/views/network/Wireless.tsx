@@ -473,7 +473,7 @@ export const Wireless: React.FC = () => {
               <CardHeader className="border-b border-zinc-800/80 pb-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Radio className="h-4 w-4 text-cyan-400" />
+                    <Radio className="h-4 w-4 text-zinc-400" />
                     <CardTitle className="text-sm font-semibold text-zinc-200">
                       {isRu ? "Диапазон 5 GHz (Сверхбыстрый)" : "5 GHz Band (Ultra Fast)"}
                     </CardTitle>
@@ -511,7 +511,7 @@ export const Wireless: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setShowQrModal("5")}
-                      className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 text-[11px]"
+                      className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1 text-[11px]"
                     >
                       <QrCode className="h-3 w-3" />
                       <span>{isRu ? "Показать QR" : "Show QR"}</span>
@@ -539,7 +539,7 @@ export const Wireless: React.FC = () => {
 
                 <div className="p-2.5 rounded-lg bg-zinc-900/60 border border-zinc-800 text-[11px] text-zinc-400 flex items-center justify-between">
                   <span>{isRu ? "Ширина: 160 MHz (EHT160)" : "Bandwidth: 160 MHz (EHT160)"}</span>
-                  <Badge variant="outline" className="border-cyan-800/80 text-cyan-400 text-[10px]">
+                  <Badge variant="outline" className="border-zinc-700 text-zinc-300 text-[10px]">
                     5 GHz
                   </Badge>
                 </div>
@@ -853,7 +853,7 @@ export const Wireless: React.FC = () => {
                     {/* WPA3 / SAE Flags & Roaming */}
                     <div className="space-y-3 p-3 rounded-lg bg-zinc-900/50 border border-zinc-800">
                       <div className="text-[11px] font-semibold text-zinc-200 flex items-center gap-1.5">
-                        <Shield className="h-3.5 w-3.5 text-cyan-400" />
+                        <Shield className="h-3.5 w-3.5 text-zinc-400" />
                         <span>{isRu ? "Безопасность WPA3 / SAE и роуминг" : "WPA3 / SAE Flags & Roaming"}</span>
                       </div>
 

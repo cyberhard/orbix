@@ -146,8 +146,8 @@ export const PolicyEngineView: React.FC = () => {
     switch (action) {
       case "zapret_dpi":
         return (
-          <Badge className="bg-purple-950/80 text-purple-300 border border-purple-800/80 font-mono text-[10px] flex items-center gap-1">
-            <Zap className="h-3 w-3" />
+          <Badge variant="outline" className="bg-zinc-900 text-zinc-300 border-zinc-800 font-mono text-[10px] flex items-center gap-1">
+            <Zap className="h-3 w-3 text-zinc-400" />
             <span>Zapret ({target?.replace("profile:", "") || "DPI"})</span>
           </Badge>
         );
@@ -183,7 +183,7 @@ export const PolicyEngineView: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-500/20 text-purple-400 border border-purple-500/30 uppercase tracking-wider">
+            <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-zinc-800 text-zinc-300 border border-zinc-700 uppercase tracking-wider">
               {isRu ? "Экспертный режим" : "Expert Mode"}
             </span>
             <h2 className="text-base font-bold text-zinc-100">
@@ -211,7 +211,7 @@ export const PolicyEngineView: React.FC = () => {
           <Button
             size="sm"
             onClick={() => setIsAddOpen(true)}
-            className="text-xs h-8 bg-purple-600 hover:bg-purple-500 text-white gap-1.5"
+            className="text-xs h-8 bg-zinc-100 hover:bg-zinc-200 text-zinc-950 font-medium gap-1.5"
           >
             <Plus className="h-3.5 w-3.5" />
             {isRu ? "Добавить политику" : "Add Policy"}
@@ -253,8 +253,9 @@ export const PolicyEngineView: React.FC = () => {
                 <span>{isRu ? "Обнаружен конфликт приоритетов:" : "Policy Conflict Detected:"}</span>
               </div>
               <p className="text-[11px] text-zinc-300">{isRu ? c.messageRu : c.message}</p>
-              <div className="pt-1 text-[11px] text-emerald-400 font-medium">
-                💡 {isRu ? "Рекомендация:" : "Recommendation:"} {isRu ? c.recommendationRu : c.recommendation}
+              <div className="pt-1 text-[11px] text-zinc-300 font-medium flex items-center gap-1.5">
+                <Info className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+                <span>{isRu ? "Рекомендация:" : "Recommendation:"} {isRu ? c.recommendationRu : c.recommendation}</span>
               </div>
             </div>
           ))}
@@ -266,7 +267,7 @@ export const PolicyEngineView: React.FC = () => {
         <CardHeader className="pb-3 border-b border-zinc-800/80">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <CardTitle className="text-xs font-semibold text-zinc-200 flex items-center gap-2">
-              <Network className="h-4 w-4 text-purple-400" />
+              <Network className="h-4 w-4 text-zinc-400" />
               <span>{isRu ? "Активные политики в порядке исполнения (Сверху вниз)" : "Active Policies (Evaluation Priority Order)"}</span>
             </CardTitle>
             <div className="relative w-64">
@@ -313,7 +314,7 @@ export const PolicyEngineView: React.FC = () => {
                     !policy.enabled ? "opacity-50" : ""
                   }`}
                 >
-                  <TableCell className="text-center font-mono text-xs font-bold text-purple-400">
+                  <TableCell className="text-center font-mono text-xs font-bold text-zinc-300">
                     {policy.priority}
                   </TableCell>
                   <TableCell>
@@ -348,7 +349,6 @@ export const PolicyEngineView: React.FC = () => {
                     <Switch
                       checked={policy.enabled}
                       onCheckedChange={() => togglePolicy(policy.id)}
-                      className="data-[state=checked]:bg-purple-600 data-[state=unchecked]:bg-zinc-800"
                     />
                   </TableCell>
                   <TableCell className="text-right">
@@ -374,7 +374,7 @@ export const PolicyEngineView: React.FC = () => {
         <DialogContent className="sm:max-w-md bg-zinc-950 border-zinc-800 text-zinc-100">
           <DialogHeader>
             <DialogTitle className="text-sm font-semibold flex items-center gap-2">
-              <Plus className="h-4 w-4 text-purple-400" />
+              <Plus className="h-4 w-4 text-zinc-400" />
               {isRu ? "Создать новую сетевую политику" : "Create New Network Policy"}
             </DialogTitle>
             <DialogDescription className="text-xs text-zinc-400">
@@ -441,7 +441,7 @@ export const PolicyEngineView: React.FC = () => {
             <Button variant="outline" size="sm" onClick={() => setIsAddOpen(false)} className="text-xs">
               {isRu ? "Отмена" : "Cancel"}
             </Button>
-            <Button size="sm" onClick={handleCreatePolicy} className="text-xs bg-purple-600 hover:bg-purple-500 text-white">
+            <Button size="sm" onClick={handleCreatePolicy} className="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-950 font-medium">
               {isRu ? "Создать политику" : "Create Policy"}
             </Button>
           </DialogFooter>
@@ -453,7 +453,7 @@ export const PolicyEngineView: React.FC = () => {
         <DialogContent className="sm:max-w-2xl bg-zinc-950 border-zinc-800 text-zinc-100">
           <DialogHeader>
             <DialogTitle className="text-sm font-semibold flex items-center gap-2">
-              <Code className="h-4 w-4 text-purple-400" />
+              <Code className="h-4 w-4 text-zinc-400" />
               {isRu ? "Скомпилированные конфигурации ядра" : "Compiled Backend Artifacts"}
             </DialogTitle>
             <DialogDescription className="text-xs text-zinc-400">
@@ -465,7 +465,7 @@ export const PolicyEngineView: React.FC = () => {
 
           <div className="space-y-3 py-2 max-h-[420px] overflow-y-auto font-mono text-[11px]">
             <div className="p-3 rounded-lg bg-zinc-900/60 border border-zinc-800">
-              <span className="text-purple-400 font-bold block mb-1">Sing-box Route Rules (config.json):</span>
+              <span className="text-zinc-200 font-bold block mb-1">Sing-box Route Rules (config.json):</span>
               <pre className="text-zinc-300 whitespace-pre-wrap">
                 {JSON.stringify(compiledConfig.singboxRules, null, 2)}
               </pre>

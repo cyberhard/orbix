@@ -94,6 +94,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, onSelectRoute, i
           items: [
             { id: "diagnostics", label: t.nav.diagnostics, icon: <Terminal className="h-4 w-4" /> },
             { id: "bandwidth", label: t.nav.realtimeGraphs, icon: <LineChart className="h-4 w-4" /> },
+            { id: "logs", label: t.nav.systemLogs, icon: <Terminal className="h-4 w-4" /> },
+            { id: "backup", label: t.nav.backupFlash, icon: <Save className="h-4 w-4" />, badge: "Safe" },
+            { id: "admin", label: t.nav.adminSsh, icon: <Key className="h-4 w-4" /> },
             { id: "general", label: t.nav.generalSettings, icon: <Cpu className="h-4 w-4" /> },
             { id: "install", label: t.nav.installCatalog, icon: <Download className="h-4 w-4" />, badge: "Catalog" },
           ],

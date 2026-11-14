@@ -398,7 +398,7 @@ export const Firewall: React.FC = () => {
         <Card className="md:col-span-2">
           <CardHeader className="pb-3 border-b flex flex-row items-center justify-between">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <Shield className="h-4 w-4 text-cyan-400" />
+              <Shield className="h-4 w-4 text-zinc-400" />
               <span>{lang === "ru" ? "Правила фильтрации трафика (Traffic Rules)" : "Traffic Rules"}</span>
             </CardTitle>
             <Badge variant="outline" className="text-[10px] font-mono">

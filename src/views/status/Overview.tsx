@@ -654,7 +654,7 @@ export const Overview: React.FC = () => {
                       }
                       className="h-10 text-xs justify-start gap-2.5 border-border bg-muted/40 hover:bg-muted"
                     >
-                      <Shield className={`h-4 w-4 text-purple-400 ${actionLoading === "vpn" ? "animate-spin" : ""}`} />
+                      <Shield className={`h-4 w-4 text-zinc-400 ${actionLoading === "vpn" ? "animate-spin" : ""}`} />
                       <div className="text-left">
                         <div className="font-medium text-foreground">{isRu ? "Переподключить защиту" : "Reconnect VPN"}</div>
                         <div className="text-[10px] text-muted-foreground">{isRu ? "Перезапуск туннеля" : "Restart proxy tunnel"}</div>
@@ -1269,7 +1269,7 @@ export const Overview: React.FC = () => {
                                   {iface.interface}
                                 </span>
                                 {iface.interface.startsWith("awg") && (
-                                  <Badge variant="outline" className="text-[9px] font-mono border-purple-500/40 text-purple-400 bg-purple-500/10">
+                                  <Badge variant="outline" className="text-[9px] font-mono border-zinc-700 text-zinc-300 bg-zinc-900">
                                     AWG
                                   </Badge>
                                 )}

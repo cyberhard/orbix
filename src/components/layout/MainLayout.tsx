@@ -38,27 +38,136 @@ import { BackupFlash } from "@/views/system/BackupFlash";
 import { HardwareCatalog } from "@/views/install/HardwareCatalog";
 import { SetupWizardModal } from "@/views/wizard/SetupWizardModal";
 import { useWizardStore } from "@/services/wizard/wizard-store";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 export const MainLayout: React.FC = () => {
-  // Read initial route from URL hash (e.g. #/subscriptions, #/wireless, #/traffic)
-  const getRouteFromHash = () => {
+  // Read initial route from URL hash (e.g. #/subscriptions, #/wireless, #/traffic, #/system/backup)
+  const getRouteFromHash = (): string => {
     if (typeof window === "undefined") return "overview";
-    const hash = window.location.hash.replace(/^#\/?/, "").toLowerCase();
-    if (hash === "graphs" || hash === "realtime") return "bandwidth";
-    if (hash === "traffic" || hash === "flow" || hash === "topology") return "traffic";
-    if (hash === "explain" || hash === "diagnose-route" || hash === "why") return "explain";
-    if (hash === "policies" || hash === "policy" || hash === "rules" || hash === "policy-rules") return "policies";
-    if (hash === "lists" || hash === "categories" || hash === "feeds") return "lists";
-    if (hash === "dns" || hash === "smartdns" || hash === "dns-routing") return "dns";
-    if (hash === "devices" || hash === "leases" || hash === "clients") return "clients";
-    if (hash === "wifi" || hash === "wireless") return "wireless";
-    if (hash === "vpns" || hash === "vpn-manager") return "vpn";
-    if (hash === "subs" || hash === "sub" || hash === "happ") return "subscriptions";
-    if (hash === "logs" || hash === "syslog") return "logs";
-    if (hash === "fw" || hash === "firewall-rules") return "firewall";
-    if (hash === "install" || hash === "catalog" || hash === "firmware" || hash === "devices-catalog") return "install";
-    if (hash === "wizard" || hash === "setup") return "wizard";
-    return hash || "overview";
+    let raw = window.location.hash.replace(/^#\/?/, "").toLowerCase().trim();
+    raw = raw.split("?")[0].replace(/\/+$/, "");
+    if (!raw) return "overview";
+
+    const segments = raw.split("/").filter(Boolean);
+    const lastSegment = segments[segments.length - 1] || "overview";
+    const fullNormalized = segments.join("/");
+
+    const routeMap: Record<string, string> = {
+      // Status
+      "overview": "overview",
+      "status": "overview",
+      "status/overview": "overview",
+      "graphs": "bandwidth",
+      "realtime": "bandwidth",
+      "bandwidth": "bandwidth",
+      "status/bandwidth": "bandwidth",
+      "status/graphs": "bandwidth",
+      "devices": "clients",
+      "leases": "clients",
+      "clients": "clients",
+      "status/clients": "clients",
+      "logs": "logs",
+      "syslog": "logs",
+      "status/logs": "logs",
+
+      // Traffic
+      "traffic": "traffic",
+      "flow": "traffic",
+      "topology": "traffic",
+      "traffic/flow": "traffic",
+      "traffic/topology": "traffic",
+      "explain": "explain",
+      "diagnose-route": "explain",
+      "why": "explain",
+      "traffic/explain": "explain",
+
+      // Policy & Lists
+      "policies": "policies",
+      "policy": "policies",
+      "rules": "policies",
+      "policy-rules": "policies",
+      "expert/policies": "policies",
+      "simple/policies": "policies",
+      "lists": "lists",
+      "categories": "lists",
+      "feeds": "lists",
+      "dns": "dns",
+      "smartdns": "dns",
+      "dns-routing": "dns",
+
+      // Circumvention
+      "vpn": "vpn",
+      "vpns": "vpn",
+      "vpn-manager": "vpn",
+      "circumvention/vpn": "vpn",
+      "subs": "subscriptions",
+      "sub": "subscriptions",
+      "happ": "subscriptions",
+      "subscriptions": "subscriptions",
+      "circumvention/subscriptions": "subscriptions",
+      "zapret": "zapret",
+      "circumvention/zapret": "zapret",
+      "podkop": "podkop",
+      "circumvention/podkop": "podkop",
+      "pbr": "pbr",
+      "circumvention/pbr": "pbr",
+
+      // Network
+      "interfaces": "interfaces",
+      "vlans": "interfaces",
+      "network/interfaces": "interfaces",
+      "wifi": "wireless",
+      "wireless": "wireless",
+      "network/wireless": "wireless",
+      "network/wifi": "wireless",
+      "dhcp": "dhcp",
+      "dhcp-dns": "dhcp",
+      "network/dhcp": "dhcp",
+      "fw": "firewall",
+      "firewall": "firewall",
+      "firewall-rules": "firewall",
+      "network/firewall": "firewall",
+      "diagnostics": "diagnostics",
+      "diag": "diagnostics",
+      "network/diagnostics": "diagnostics",
+
+      // System
+      "general": "general",
+      "settings": "general",
+      "system/general": "general",
+      "admin": "admin",
+      "ssh": "admin",
+      "password": "admin",
+      "system/admin": "admin",
+      "software": "software",
+      "packages": "software",
+      "opkg": "software",
+      "apk": "software",
+      "system/software": "software",
+      "services": "services",
+      "startup": "services",
+      "init": "services",
+      "system/services": "services",
+      "tasks": "tasks",
+      "cron": "tasks",
+      "crontab": "tasks",
+      "system/tasks": "tasks",
+      "backup": "backup",
+      "flash": "backup",
+      "restore": "backup",
+      "system/backup": "backup",
+      "system/flash": "backup",
+
+      // Install & Wizard
+      "install": "install",
+      "catalog": "install",
+      "firmware": "install",
+      "devices-catalog": "install",
+      "wizard": "wizard",
+      "setup": "wizard",
+    };
+
+    return routeMap[fullNormalized] || routeMap[lastSegment] || routeMap[raw] || "overview";
   };
 
   const [currentRoute, setCurrentRouteState] = useState<string>(getRouteFromHash());
@@ -219,11 +328,13 @@ export const MainLayout: React.FC = () => {
 
         <main className="flex-1 p-4 md:p-6 pb-20 overflow-y-auto">
           <div className="mx-auto max-w-7xl">
-            <Suspense fallback={<div className="p-8 text-center text-xs text-muted-foreground animate-pulse">Loading view...</div>}>
-              <div key={currentRoute} className="animate-page-enter">
-                {renderView()}
-              </div>
-            </Suspense>
+            <ErrorBoundary key={currentRoute}>
+              <Suspense fallback={<div className="p-8 text-center text-xs text-muted-foreground animate-pulse">Loading view...</div>}>
+                <div key={currentRoute} className="animate-page-enter">
+                  {renderView()}
+                </div>
+              </Suspense>
+            </ErrorBoundary>
           </div>
         </main>
       </div>

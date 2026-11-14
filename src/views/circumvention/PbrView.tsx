@@ -97,8 +97,8 @@ export const PbrView: React.FC = () => {
     switch (iface) {
       case "zapret":
         return (
-          <Badge className="bg-purple-600 hover:bg-purple-700 text-white font-mono text-[10px] flex items-center gap-1 shadow-sm">
-            <Zap className="h-3 w-3" />
+          <Badge variant="outline" className="bg-zinc-900 border-zinc-800 text-zinc-300 font-mono text-[10px] flex items-center gap-1 shadow-sm">
+            <Zap className="h-3 w-3 text-zinc-400" />
             <span>Zapret (DPI Bypass)</span>
           </Badge>
         );
@@ -125,11 +125,11 @@ export const PbrView: React.FC = () => {
       </div>
 
       {/* Zapret DPI Bypass Integration Notice */}
-      <div className="flex items-start sm:items-center gap-3 p-3.5 rounded-xl border border-purple-500/30 bg-purple-500/10 text-xs backdrop-blur-sm shadow-sm">
-        <Zap className="h-4 w-4 text-purple-400 shrink-0 mt-0.5 sm:mt-0" />
+      <div className="flex items-start sm:items-center gap-3 p-3.5 rounded-xl border border-zinc-800 bg-zinc-900/60 text-xs shadow-sm">
+        <Zap className="h-4 w-4 text-zinc-400 shrink-0 mt-0.5 sm:mt-0" />
         <div className="space-y-0.5">
-          <span className="font-semibold text-purple-300">{t.pbr.zapretBannerTitle}: </span>
-          <span className="text-muted-foreground">{t.pbr.zapretBannerDesc}</span>
+          <span className="font-semibold text-zinc-200">{t.pbr.zapretBannerTitle}: </span>
+          <span className="text-zinc-400">{t.pbr.zapretBannerDesc}</span>
         </div>
       </div>
 

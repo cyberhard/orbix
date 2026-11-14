@@ -44,7 +44,7 @@ export const StartupServices: React.FC = () => {
     try {
       setLoading(true);
       const res = await ubusClient.getServices();
-      const list: ServiceInfo[] = Object.entries(res).map(([name, data]) => ({
+      const list: ServiceInfo[] = Object.entries(res || {}).map(([name, data]) => ({
         name,
         start: data.start,
         stop: data.stop,

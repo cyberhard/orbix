@@ -253,7 +253,7 @@ export const SetupWizardModal: React.FC = () => {
                         LAN: {hardware.network.detectedLanDevice} ({hardware.network.detectedLanIp})
                       </Badge>
                       {hardware.wireless.radios.map((r) => (
-                        <Badge key={r.device} variant="outline" className="border-cyan-800 text-cyan-300 font-mono">
+                        <Badge key={r.device} variant="outline" className="border-zinc-700 text-zinc-300 font-mono">
                           Wi-Fi {r.band} ({r.htmode})
                         </Badge>
                       ))}
@@ -269,7 +269,7 @@ export const SetupWizardModal: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <h4 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
-                  <Globe className="h-4 w-4 text-cyan-400" />
+                  <Globe className="h-4 w-4 text-zinc-400" />
                   <span>{isRu ? "Подключение к интернету (WAN) и локальная сеть (LAN)" : "Internet (WAN) & Local Network (LAN)"}</span>
                 </h4>
                 <p className="text-zinc-400 mt-0.5">
@@ -514,7 +514,7 @@ export const SetupWizardModal: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <h4 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
-                  <Layers className="h-4 w-4 text-purple-400" />
+                  <Layers className="h-4 w-4 text-zinc-400" />
                   <span>{isRu ? "Выбор предустановленных служб обхода" : "Core Circumvention & Routing Services"}</span>
                 </h4>
                 <p className="text-zinc-400 mt-0.5">
@@ -597,7 +597,7 @@ export const SetupWizardModal: React.FC = () => {
                 </div>
                 <div className="flex justify-between border-b border-zinc-800/80 pb-2">
                   <span className="text-zinc-500">Wi-Fi SSID:</span>
-                  <span className="text-cyan-400">{draft.wifiEnabled ? draft.wifiSsid : "DISABLED"}</span>
+                  <span className="text-zinc-200">{draft.wifiEnabled ? draft.wifiSsid : "DISABLED"}</span>
                 </div>
                 <div className="flex justify-between border-b border-zinc-800/80 pb-2">
                   <span className="text-zinc-500">Admin Security:</span>
@@ -605,7 +605,7 @@ export const SetupWizardModal: React.FC = () => {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-zinc-500">Active Services:</span>
-                  <span className="text-purple-400">
+                  <span className="text-zinc-300">
                     Zapret ({draft.enableZapretYoutube ? "YT" : ""}{draft.enableZapretDiscord ? " DC" : ""}) • RuNet Direct • Smart DNS
                   </span>
                 </div>

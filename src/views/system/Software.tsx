@@ -26,7 +26,7 @@ export const Software: React.FC = () => {
     try {
       setLoading(true);
       const pkgMap = await ubusClient.getPackages();
-      const list: PackageItem[] = Object.entries(pkgMap).map(([name, version]) => ({
+      const list: PackageItem[] = Object.entries(pkgMap || {}).map(([name, version]) => ({
         name,
         version,
       }));

@@ -53,13 +53,13 @@ export const CategoryListManager: React.FC = () => {
 
   const getCategoryIcon = (id: string) => {
     switch (id) {
-      case "russia": return <Building2 className="h-4 w-4 text-blue-400" />;
-      case "youtube": return <Video className="h-4 w-4 text-red-400" />;
-      case "discord": return <MessageSquare className="h-4 w-4 text-purple-400" />;
-      case "ai_services": return <Sparkles className="h-4 w-4 text-emerald-400" />;
-      case "restricted": return <Globe className="h-4 w-4 text-amber-400" />;
-      case "banking": return <ShieldAlert className="h-4 w-4 text-red-500" />;
-      case "gaming": return <Gamepad2 className="h-4 w-4 text-emerald-300" />;
+      case "russia": return <Building2 className="h-4 w-4 text-zinc-300" />;
+      case "youtube": return <Video className="h-4 w-4 text-zinc-300" />;
+      case "discord": return <MessageSquare className="h-4 w-4 text-zinc-300" />;
+      case "ai_services": return <Sparkles className="h-4 w-4 text-zinc-300" />;
+      case "restricted": return <Globe className="h-4 w-4 text-zinc-300" />;
+      case "banking": return <ShieldAlert className="h-4 w-4 text-zinc-300" />;
+      case "gaming": return <Gamepad2 className="h-4 w-4 text-zinc-300" />;
       default: return <Layers className="h-4 w-4 text-zinc-400" />;
     }
   };
@@ -114,7 +114,7 @@ export const CategoryListManager: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-base font-bold text-zinc-100 flex items-center gap-2">
-            <Layers className="h-5 w-5 text-purple-400" />
+            <Layers className="h-5 w-5 text-zinc-400" />
             <span>{isRu ? "Менеджер списков и категорий доменов" : "Domain & Category List Manager"}</span>
           </h2>
           <p className="text-xs text-zinc-400 mt-0.5">
@@ -167,7 +167,7 @@ export const CategoryListManager: React.FC = () => {
                   onClick={() => setSelectedCat(cat)}
                   className={`cursor-pointer p-3.5 rounded-xl border transition-all ${
                     isSelected
-                      ? "border-purple-500 bg-purple-950/20 text-zinc-100 shadow-md shadow-purple-950/30"
+                      ? "border-zinc-700 bg-zinc-900 text-zinc-100 shadow-sm"
                       : "border-zinc-800 bg-zinc-900/40 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900/70"
                   }`}
                 >
@@ -223,7 +223,7 @@ export const CategoryListManager: React.FC = () => {
                   <Button
                     onClick={handleAddDomainToCategory}
                     size="sm"
-                    className="h-8 text-xs bg-purple-600 hover:bg-purple-500 text-white gap-1"
+                    className="h-8 text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-950 font-medium gap-1"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     {isRu ? "Добавить" : "Add"}

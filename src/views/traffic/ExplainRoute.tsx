@@ -267,7 +267,7 @@ export const ExplainRoute: React.FC = () => {
                     </Badge>
                     {m.isWinner && (
                       <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wide">
-                        {isRu ? "★ Победитель" : "★ Winner"}
+                        {isRu ? "Победитель" : "Winner"}
                       </span>
                     )}
                   </div>
@@ -288,8 +288,9 @@ export const ExplainRoute: React.FC = () => {
                   <div key={i} className="p-3 rounded-lg border border-amber-500/30 bg-amber-950/10 space-y-1 text-xs">
                     <div className="font-semibold text-amber-300">{t.title}</div>
                     <div className="text-zinc-400 text-[11px]">{t.description}</div>
-                    <div className="pt-1 text-[11px] text-emerald-400 font-medium">
-                      💡 {isRu ? "Решение:" : "Action:"} {t.actionableStep}
+                    <div className="pt-1 text-[11px] text-zinc-300 font-medium flex items-center gap-1.5">
+                      <Info className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+                      <span>{isRu ? "Решение:" : "Action:"} {t.actionableStep}</span>
                     </div>
                   </div>
                 ))}

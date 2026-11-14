@@ -217,15 +217,15 @@ export const HardwareCatalog: React.FC = () => {
       <Tabs defaultValue="catalog" className="w-full">
         <TabsList className="bg-zinc-900 border border-zinc-800 p-1">
           <TabsTrigger value="catalog" className="gap-2">
-            <Router className="h-4 w-4 text-emerald-400" />
+            <Router className="h-4 w-4 text-zinc-400" />
             <span>{isRu ? "Каталог роутеров" : "Hardware Catalog"}</span>
           </TabsTrigger>
           <TabsTrigger value="guide" className="gap-2">
-            <BookOpen className="h-4 w-4 text-cyan-400" />
+            <BookOpen className="h-4 w-4 text-zinc-400" />
             <span>{isRu ? "Руководство для новичков" : "Beginner Flashing Guide"}</span>
           </TabsTrigger>
           <TabsTrigger value="installer" className="gap-2">
-            <Terminal className="h-4 w-4 text-purple-400" />
+            <Terminal className="h-4 w-4 text-zinc-400" />
             <span>{isRu ? "Скрипт install.sh" : "One-Line Installer"}</span>
           </TabsTrigger>
         </TabsList>
@@ -297,7 +297,7 @@ export const HardwareCatalog: React.FC = () => {
                           ? "border-emerald-800 text-emerald-400 bg-emerald-950/20"
                           : dev.status === "limited"
                           ? "border-amber-800 text-amber-400 bg-amber-950/20"
-                          : "border-purple-800 text-purple-400 bg-purple-950/20"
+                          : "border-zinc-700 text-zinc-300 bg-zinc-900"
                       }`}
                     >
                       {dev.status === "fully_supported"
@@ -336,7 +336,7 @@ export const HardwareCatalog: React.FC = () => {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-zinc-500">Wi-Fi:</span>
-                        <span className="text-cyan-400 truncate max-w-[170px]">{dev.wifi}</span>
+                        <span className="text-zinc-300 truncate max-w-[170px]">{dev.wifi}</span>
                       </div>
                     </div>
                   )}
@@ -368,7 +368,7 @@ export const HardwareCatalog: React.FC = () => {
           <Card className="border-zinc-800 bg-zinc-950 p-6 space-y-6">
             <div>
               <h3 className="text-base font-bold text-zinc-100 flex items-center gap-2">
-                <BookOpen className="h-5 w-5 text-cyan-400" />
+                <BookOpen className="h-5 w-5 text-zinc-400" />
                 <span>{isRu ? "Пошаговое руководство по переходу на OpenWrt для начинающих" : "Step-by-Step Installation Guide for Beginners"}</span>
               </h3>
               <p className="text-zinc-400 mt-1">
@@ -499,7 +499,7 @@ export const HardwareCatalog: React.FC = () => {
               <div className="p-3 bg-zinc-900/60 rounded-lg border border-zinc-800 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="font-semibold text-zinc-200 flex items-center gap-1.5">
-                    <Badge variant="outline" className="border-cyan-800 text-cyan-400 text-[9px] font-mono">SYSUPGRADE</Badge>
+                    <Badge variant="outline" className="border-zinc-700 text-zinc-300 text-[9px] font-mono">SYSUPGRADE</Badge>
                     <span>{selectedDevice.sysupgradeFilename}</span>
                   </div>
                 </div>

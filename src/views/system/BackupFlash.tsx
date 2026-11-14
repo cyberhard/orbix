@@ -576,7 +576,7 @@ export const BackupFlash: React.FC = () => {
             <Card className="border-zinc-800 bg-zinc-950 shadow-xl flex flex-col justify-between">
               <CardHeader className="border-b border-zinc-800/80 pb-3">
                 <CardTitle className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
-                  <Upload className="h-4 w-4 text-cyan-400" />
+                  <Upload className="h-4 w-4 text-zinc-400" />
                   <span>{isRu ? "Восстановить из файла" : "Restore from Backup"}</span>
                 </CardTitle>
                 <CardDescription className="text-xs text-zinc-400">
@@ -704,7 +704,7 @@ export const BackupFlash: React.FC = () => {
                   <div className="space-y-2 bg-zinc-900/50 p-3 rounded-lg border border-zinc-800">
                     <div className="font-medium text-zinc-200 flex items-center justify-between">
                       <span className="flex items-center gap-1.5">
-                        <Layers className="h-3.5 w-3.5 text-cyan-400" />
+                        <Layers className="h-3.5 w-3.5 text-zinc-400" />
                         {isRu ? "Секции конфигурации UCI:" : "UCI Configuration Sections:"}
                       </span>
                       <span className="text-[10px] text-zinc-400 font-mono">
@@ -834,7 +834,7 @@ export const BackupFlash: React.FC = () => {
                 <Card className="border-zinc-800 bg-zinc-950 shadow-xl">
                   <CardHeader className="border-b border-zinc-800 pb-3">
                     <CardTitle className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
-                      <Upload className="h-4 w-4 text-cyan-400" />
+                      <Upload className="h-4 w-4 text-zinc-400" />
                       <span>{isRu ? "Импорт и перенос на другой роутер" : "Import & Cross-Device Migration"}</span>
                     </CardTitle>
                     <CardDescription className="text-xs text-zinc-400">
@@ -1005,7 +1005,7 @@ export const BackupFlash: React.FC = () => {
                       onClick={() => setImportMode("selective")}
                       className={`cursor-pointer p-3 rounded-lg border transition-all ${
                         importMode === "selective"
-                          ? "border-cyan-500 bg-cyan-950/20"
+                          ? "border-zinc-700 bg-zinc-900"
                           : "border-zinc-800 bg-zinc-900/40 hover:border-zinc-700"
                       }`}
                     >
@@ -1053,7 +1053,7 @@ export const BackupFlash: React.FC = () => {
                                   item.status === "imported"
                                     ? "border-emerald-800 text-emerald-400"
                                     : item.status === "adapted"
-                                    ? "border-cyan-800 text-cyan-400"
+                                    ? "border-zinc-700 text-zinc-300"
                                     : item.status === "requires_attention"
                                     ? "border-amber-800 text-amber-400"
                                     : "border-rose-800 text-rose-400"

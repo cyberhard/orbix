@@ -117,14 +117,14 @@ export const SimplePolicyManager: React.FC = () => {
         </div>
       )}
 
-      {/* Grid of Human-Friendly Scenario Cards */}
+      {/* Grid of Industrial Scenario Cards */}
       <div className="grid gap-4 sm:grid-cols-2">
         {/* Card 1: YouTube DPI Bypass */}
         <Card className="border-zinc-800 bg-zinc-950 hover:border-zinc-700 transition-colors">
           <CardHeader className="pb-3 border-b border-zinc-900">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-red-950/40 border border-red-800/60 text-red-400">
+                <div className="p-2 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300">
                   <Video className="h-5 w-5" />
                 </div>
                 <div>
@@ -139,7 +139,6 @@ export const SimplePolicyManager: React.FC = () => {
               <Switch
                 checked={youtubePolicy?.enabled ?? true}
                 onCheckedChange={() => handleToggle("sys-policy-youtube-zapret", youtubePolicy?.enabled ?? true)}
-                className="data-[state=checked]:bg-red-600 data-[state=unchecked]:bg-zinc-800"
               />
             </div>
           </CardHeader>
@@ -150,7 +149,7 @@ export const SimplePolicyManager: React.FC = () => {
                 : "Google Video streams desynchronized via Zapret hostfakesplit. Delivers full 1080p playback at maximum line rate."}
             </p>
             <div className="flex items-center gap-2 pt-1">
-              <Badge variant="outline" className="text-[10px] font-mono text-emerald-400 bg-emerald-950/20 border-emerald-800/40">
+              <Badge variant="outline" className="text-[10px] font-mono text-zinc-300 bg-zinc-900 border-zinc-800">
                 Zapret (DPI Desync)
               </Badge>
               <span className="text-[10px] text-zinc-500 font-mono">0 GB VPN spent</span>
@@ -163,7 +162,7 @@ export const SimplePolicyManager: React.FC = () => {
           <CardHeader className="pb-3 border-b border-zinc-900">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-purple-950/40 border border-purple-800/60 text-purple-400">
+                <div className="p-2 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300">
                   <MessageSquare className="h-5 w-5" />
                 </div>
                 <div>
@@ -178,7 +177,6 @@ export const SimplePolicyManager: React.FC = () => {
               <Switch
                 checked={discordPolicy?.enabled ?? true}
                 onCheckedChange={() => handleToggle("sys-policy-discord-zapret", discordPolicy?.enabled ?? true)}
-                className="data-[state=checked]:bg-purple-600 data-[state=unchecked]:bg-zinc-800"
               />
             </div>
           </CardHeader>
@@ -189,7 +187,7 @@ export const SimplePolicyManager: React.FC = () => {
                 : "Multisplit ClientHello desync on ports 2053, 2083, 8443 for crystal clear Discord voice chat."}
             </p>
             <div className="flex items-center gap-2 pt-1">
-              <Badge variant="outline" className="text-[10px] font-mono text-purple-400 bg-purple-950/20 border-purple-800/40">
+              <Badge variant="outline" className="text-[10px] font-mono text-zinc-300 bg-zinc-900 border-zinc-800">
                 Zapret multisplit
               </Badge>
               <span className="text-[10px] text-zinc-500 font-mono">Voice WebRTC active</span>
@@ -202,7 +200,7 @@ export const SimplePolicyManager: React.FC = () => {
           <CardHeader className="pb-3 border-b border-zinc-900">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-950/40 border border-blue-800/60 text-blue-400">
+                <div className="p-2 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300">
                   <Building2 className="h-5 w-5" />
                 </div>
                 <div>
@@ -217,7 +215,6 @@ export const SimplePolicyManager: React.FC = () => {
               <Switch
                 checked={russiaPolicy?.enabled ?? true}
                 onCheckedChange={() => handleToggle("sys-policy-russia-direct", russiaPolicy?.enabled ?? true)}
-                className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-zinc-800"
               />
             </div>
           </CardHeader>
@@ -228,7 +225,7 @@ export const SimplePolicyManager: React.FC = () => {
                 : "Gosuslugi, Russian banks, Ozon, WB, VK, and all .ru zones strictly bypass VPN to prevent bank account lockouts."}
             </p>
             <div className="flex items-center gap-2 pt-1">
-              <Badge variant="outline" className="text-[10px] font-mono text-blue-400 bg-blue-950/20 border-blue-800/40">
+              <Badge variant="outline" className="text-[10px] font-mono text-zinc-300 bg-zinc-900 border-zinc-800">
                 Direct WAN (Bypass)
               </Badge>
               <span className="text-[10px] text-zinc-500 font-mono">Ministry of Digital CA OK</span>
@@ -241,7 +238,7 @@ export const SimplePolicyManager: React.FC = () => {
           <CardHeader className="pb-3 border-b border-zinc-900">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-emerald-950/40 border border-emerald-800/60 text-emerald-400">
+                <div className="p-2 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300">
                   <Sparkles className="h-5 w-5" />
                 </div>
                 <div>
@@ -256,7 +253,6 @@ export const SimplePolicyManager: React.FC = () => {
               <Switch
                 checked={aiPolicy?.enabled ?? true}
                 onCheckedChange={() => handleToggle("sys-policy-ai-smartdns", aiPolicy?.enabled ?? true)}
-                className="data-[state=checked]:bg-emerald-600 data-[state=unchecked]:bg-zinc-800"
               />
             </div>
           </CardHeader>
@@ -267,7 +263,7 @@ export const SimplePolicyManager: React.FC = () => {
                 : "Unblocks ChatGPT and Claude. Leverages fast transparent reverse proxying or VLESS Reality tunnel."}
             </p>
             <div className="flex items-center gap-2 pt-1">
-              <Badge variant="outline" className="text-[10px] font-mono text-emerald-400 bg-emerald-950/20 border-emerald-800/40">
+              <Badge variant="outline" className="text-[10px] font-mono text-zinc-300 bg-zinc-900 border-zinc-800">
                 Smart DNS / dns-ai.ru
               </Badge>
               <span className="text-[10px] text-zinc-500 font-mono">
@@ -282,7 +278,7 @@ export const SimplePolicyManager: React.FC = () => {
           <CardHeader className="pb-3 border-b border-zinc-900">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-purple-950/40 border border-purple-800/60 text-purple-400">
+                <div className="p-2 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300">
                   <Globe className="h-5 w-5" />
                 </div>
                 <div>
@@ -297,7 +293,6 @@ export const SimplePolicyManager: React.FC = () => {
               <Switch
                 checked={geoblockedPolicy?.enabled ?? true}
                 onCheckedChange={() => handleToggle("sys-policy-geoblocked-vpn", geoblockedPolicy?.enabled ?? true)}
-                className="data-[state=checked]:bg-purple-600 data-[state=unchecked]:bg-zinc-800"
               />
             </div>
           </CardHeader>
@@ -308,7 +303,7 @@ export const SimplePolicyManager: React.FC = () => {
                 : `BGP-dropped subnets and geoblocked sites routed through active VLESS outbound ${activeVlessNode?.name ? `(${activeVlessNode.name})` : ""}.`}
             </p>
             <div className="flex items-center gap-2 pt-1">
-              <Badge variant="outline" className="text-[10px] font-mono text-purple-400 bg-purple-950/20 border-purple-800/40">
+              <Badge variant="outline" className="text-[10px] font-mono text-zinc-300 bg-zinc-900 border-zinc-800">
                 VLESS XTLS Reality
               </Badge>
               <span className="text-[10px] text-zinc-500 font-mono">
@@ -323,7 +318,7 @@ export const SimplePolicyManager: React.FC = () => {
           <CardHeader className="pb-3 border-b border-zinc-900">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-amber-950/40 border border-amber-800/60 text-amber-400">
+                <div className="p-2 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300">
                   <Lock className="h-5 w-5" />
                 </div>
                 <div>
@@ -349,7 +344,6 @@ export const SimplePolicyManager: React.FC = () => {
                       : "Kill Switch disabled"
                   );
                 }}
-                className="data-[state=checked]:bg-amber-500 data-[state=unchecked]:bg-zinc-800"
               />
             </div>
           </CardHeader>
@@ -360,7 +354,7 @@ export const SimplePolicyManager: React.FC = () => {
                 : "Guarantees no unencrypted traffic leaks to ISP if the tunnel fails. Router management at 192.168.1.1 is strictly preserved."}
             </p>
             <div className="flex items-center gap-2 pt-1">
-              <Badge variant="outline" className="text-[10px] font-mono text-amber-400 bg-amber-950/20 border-amber-800/40">
+              <Badge variant="outline" className="text-[10px] font-mono text-zinc-300 bg-zinc-900 border-zinc-800">
                 LAN Admin Protected
               </Badge>
               <span className="text-[10px] text-zinc-500 font-mono">Drop on disconnect</span>

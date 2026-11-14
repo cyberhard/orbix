@@ -4,7 +4,7 @@ import { ubusClient } from "@/lib/ubus-client";
 import { VlessNode, SubscriptionMetadata, VpnOutboundGroup, KillSwitchConfig } from "@/types/ubus";
 
 const DEFAULT_METADATA: SubscriptionMetadata = {
-  profileTitle: "Liberty VPN 🛡️",
+  profileTitle: "Liberty VPN",
   updateInterval: "12",
   uploadBytes: 0,
   downloadBytes: 0,

@@ -196,7 +196,7 @@ export const DnsRoutingCenter: React.FC = () => {
           <div className="p-3.5 rounded-xl border border-zinc-800 bg-zinc-900/60 flex items-center justify-between">
             <div className="space-y-0.5">
               <span className="font-semibold text-xs text-zinc-200 flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-purple-400" />
+                <Sparkles className="h-3.5 w-3.5 text-zinc-400" />
                 <span>Smart DNS (dns-ai.ru)</span>
               </span>
               <p className="text-[10px] text-zinc-500">
@@ -206,7 +206,6 @@ export const DnsRoutingCenter: React.FC = () => {
             <Switch
               checked={smartAiDns}
               onCheckedChange={setSmartAiDns}
-              className="data-[state=checked]:bg-purple-500 data-[state=unchecked]:bg-zinc-800"
             />
           </div>
         </CardContent>
