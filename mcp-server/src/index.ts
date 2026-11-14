@@ -308,6 +308,126 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {},
         },
       },
+      {
+        name: "apply_policies",
+        description: "Apply domain routing policies immediately to Sing-box and dnsmasq (blocked, direct RuNet, proxy VPN).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            blocked_domains: {
+              type: "array",
+              items: { type: "string" },
+              description: "List of domains to sinkhole / drop",
+            },
+            direct_domains: {
+              type: "array",
+              items: { type: "string" },
+              description: "List of domains to route directly via WAN / domestic Yandex DNS",
+            },
+            proxy_domains: {
+              type: "array",
+              items: { type: "string" },
+              description: "List of domains to route through VLESS Reality tunnel",
+            },
+          },
+        },
+      },
+      {
+        name: "get_policies",
+        description: "Get active domain policies, categories, and routing rules from router memory/storage.",
+        inputSchema: {
+          type: "object",
+          properties: {},
+        },
+      },
+      {
+        name: "set_singbox_outbound",
+        description: "Switch active VLESS Sing-box outbound node with Reality parameters.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            server: { type: "string", description: "Node hostname or IP" },
+            port: { type: "number", description: "Node port", default: 443 },
+            uuid: { type: "string", description: "VLESS UUID" },
+            flow: { type: "string", default: "xtls-rprx-vision" },
+            sni: { type: "string", description: "TLS SNI mask (e.g. 'ticket.rzd.ru' or 'dl.google.com')" },
+            publicKey: { type: "string", description: "Reality public key" },
+            shortId: { type: "string", description: "Reality short ID" },
+            fingerprint: { type: "string", default: "firefox" },
+          },
+          required: ["server", "uuid"],
+        },
+      },
+      {
+        name: "test_singbox_node",
+        description: "Test latency and reachability to a remote VLESS node.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            server: { type: "string", description: "Remote node IP or host" },
+            port: { type: "number", description: "Remote node port", default: 443 },
+          },
+          required: ["server"],
+        },
+      },
+      {
+        name: "import_amneziawg",
+        description: "Import AmneziaWG (awg0) WireGuard obfuscated configuration (.conf text).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            conf: { type: "string", description: "WireGuard/AmneziaWG configuration text" },
+            apply: { type: "boolean", description: "Apply and bring up interface immediately", default: true },
+          },
+          required: ["conf"],
+        },
+      },
+      {
+        name: "set_killswitch",
+        description: "Configure emergency VPN KillSwitch to prevent traffic leaks to ISP WAN if tunnels drop.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            enabled: { type: "boolean", description: "Enable or disable KillSwitch" },
+            scope: {
+              type: "string",
+              enum: ["vpn_devices", "all"],
+              default: "vpn_devices",
+              description: "Scope: 'vpn_devices' (devices assigned to VPN) or 'all' (entire LAN)",
+            },
+            allow_lan: { type: "boolean", default: true, description: "Allow local LAN communication" },
+          },
+          required: ["enabled"],
+        },
+      },
+      {
+        name: "get_killswitch",
+        description: "Get active KillSwitch status, mode, and dropped packet telemetry.",
+        inputSchema: {
+          type: "object",
+          properties: {},
+        },
+      },
+      {
+        name: "arm_rollback",
+        description: "Arm the Zero-Lockout Watchdog timer (default 75s). Changes roll back automatically if not confirmed.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            timeout: { type: "number", description: "Watchdog timer in seconds", default: 75 },
+          },
+        },
+      },
+      {
+        name: "confirm_rollback",
+        description: "Confirm active changes and disarm the Zero-Lockout Watchdog timer.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            token: { type: "string", description: "Rollback authorization token" },
+          },
+        },
+      },
     ],
   };
 });
@@ -460,6 +580,95 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         await callUbus("uci", "apply", { rollback: true, timeout: 30 });
         return {
           content: [{ type: "text", text: "Successfully committed and applied all UCI changes with rollback safety." }],
+        };
+      }
+
+      case "apply_policies": {
+        const { blocked_domains, direct_domains, proxy_domains } = args as any;
+        const res = await callUbus("circumvention", "policy_apply", {
+          blocked_domains: blocked_domains || [],
+          direct_domains: direct_domains || [],
+          proxy_domains: proxy_domains || [],
+        });
+        return {
+          content: [{ type: "text", text: `Policies applied successfully: ${JSON.stringify(res)}` }],
+        };
+      }
+
+      case "get_policies": {
+        const res = await callUbus("circumvention", "policy_status");
+        return {
+          content: [{ type: "text", text: JSON.stringify(res, null, 2) }],
+        };
+      }
+
+      case "set_singbox_outbound": {
+        const res = await callUbus("circumvention", "singbox_set_outbound", {
+          node: args,
+        });
+        return {
+          content: [{ type: "text", text: `Sing-box VLESS outbound updated: ${JSON.stringify(res)}` }],
+        };
+      }
+
+      case "test_singbox_node": {
+        const { server: srv, port } = args as any;
+        const res = await callUbus("circumvention", "singbox_test_node", {
+          server: srv,
+          port: port || 443,
+        });
+        return {
+          content: [{ type: "text", text: JSON.stringify(res, null, 2) }],
+        };
+      }
+
+      case "import_amneziawg": {
+        const { conf, apply } = args as any;
+        const res = await callUbus("circumvention", "awg_import_conf", {
+          conf,
+          apply: apply !== false,
+        });
+        return {
+          content: [{ type: "text", text: `AmneziaWG configuration imported: ${JSON.stringify(res)}` }],
+        };
+      }
+
+      case "set_killswitch": {
+        const { enabled, scope, allow_lan } = args as any;
+        const res = await callUbus("circumvention", "killswitch_set", {
+          enabled: !!enabled,
+          scope: scope || "vpn_devices",
+          allow_lan: allow_lan !== false,
+        });
+        return {
+          content: [{ type: "text", text: `KillSwitch state updated: ${JSON.stringify(res)}` }],
+        };
+      }
+
+      case "get_killswitch": {
+        const res = await callUbus("circumvention", "killswitch_status");
+        return {
+          content: [{ type: "text", text: JSON.stringify(res, null, 2) }],
+        };
+      }
+
+      case "arm_rollback": {
+        const { timeout } = args as any;
+        const res = await callUbus("circumvention", "arm_rollback", {
+          timeout: timeout || 75,
+        });
+        return {
+          content: [{ type: "text", text: `Zero-Lockout Watchdog armed for ${timeout || 75}s. Token: ${JSON.stringify(res)}` }],
+        };
+      }
+
+      case "confirm_rollback": {
+        const { token } = args as any;
+        const res = await callUbus("circumvention", "confirm_rollback", {
+          token: token || "",
+        });
+        return {
+          content: [{ type: "text", text: `Changes confirmed. Rollback watchdog disarmed.` }],
         };
       }
 
