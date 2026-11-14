@@ -43,12 +43,16 @@ export const MainLayout: React.FC = () => {
     const hash = window.location.hash.replace(/^#\/?/, "").toLowerCase();
     if (hash === "graphs" || hash === "realtime") return "bandwidth";
     if (hash === "traffic" || hash === "flow" || hash === "topology") return "traffic";
-    if (hash === "explain" || hash === "diagnose-route") return "explain";
-    if (hash === "policies" || hash === "policy" || hash === "rules") return "policies";
+    if (hash === "explain" || hash === "diagnose-route" || hash === "why") return "explain";
+    if (hash === "policies" || hash === "policy" || hash === "rules" || hash === "policy-rules") return "policies";
     if (hash === "lists" || hash === "categories" || hash === "feeds") return "lists";
-    if (hash === "dns" || hash === "smartdns") return "dns";
-    if (hash === "devices" || hash === "leases") return "clients";
-    if (hash === "wifi") return "wireless";
+    if (hash === "dns" || hash === "smartdns" || hash === "dns-routing") return "dns";
+    if (hash === "devices" || hash === "leases" || hash === "clients") return "clients";
+    if (hash === "wifi" || hash === "wireless") return "wireless";
+    if (hash === "vpns" || hash === "vpn-manager") return "vpn";
+    if (hash === "subs" || hash === "sub" || hash === "happ") return "subscriptions";
+    if (hash === "logs" || hash === "syslog") return "logs";
+    if (hash === "fw" || hash === "firewall-rules") return "firewall";
     return hash || "overview";
   };
 

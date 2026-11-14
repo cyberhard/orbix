@@ -207,10 +207,10 @@ export const TrafficFlow: React.FC = () => {
                 <Globe className="h-4 w-4 text-blue-400" />
               </div>
               <div className="font-semibold text-xs text-zinc-100 truncate">
-                {isAi ? "dns-ai.ru" : isRuNet ? "77.88.8.8" : "1.1.1.1 DoH"}
+                {isAi ? "dns-ai.ru" : isRuNet ? "77.88.8.8" : "dns.google"}
               </div>
               <div className="text-[11px] font-mono text-zinc-400 mt-0.5">
-                {isAi ? "Smart Reverse Proxy" : isRuNet ? "Yandex DNS / ISP" : "Cloudflare Tunnel"}
+                {isAi ? "Smart Reverse Proxy" : isRuNet ? "Яндекс.DNS / WAN" : "Google DoH / DoT"}
               </div>
               <div className="mt-3 pt-2 border-t border-zinc-800/80 flex items-center justify-between text-[10px] text-zinc-500">
                 <span>DNS Leak Prot</span>
