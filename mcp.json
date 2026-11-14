@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "openwrt-router": {
+      "command": "npx",
+      "args": ["tsx", "mcp-server/src/index.ts"],
+      "env": {
+        "OPENWRT_HOST": "http://192.168.1.1",
+        "OPENWRT_USER": "root",
+        "OPENWRT_PASS": "root",
+        "OPENWRT_MOCK": "false"
+      }
+    }
+  }
+}

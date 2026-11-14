@@ -1,0 +1,133 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Strict Monochrome Zinc Dark Theme (Linear / Vercel Aesthetic) */
+    --background: 240 10% 3.9%;          /* #09090b zinc-950 */
+    --foreground: 0 0% 98%;              /* #fafafa zinc-50 */
+
+    --card: 240 10% 3.9%;                /* #09090b zinc-950 */
+    --card-foreground: 0 0% 98%;
+
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 0 0% 98%;                 /* Crisp white primary */
+    --primary-foreground: 240 5.9% 10%;  /* Dark text on white */
+
+    --secondary: 240 3.7% 15.9%;         /* #18181b zinc-900 */
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 240 3.7% 15.9%;             /* #18181b zinc-900 */
+    --muted-foreground: 240 5% 64.9%;    /* #a1a1aa zinc-400 */
+
+    --accent: 240 3.7% 15.9%;            /* #18181b zinc-900 */
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 3.7% 15.9%;            /* #27272a zinc-800 */
+    --input: 240 3.7% 15.9%;             /* #27272a zinc-800 */
+    --ring: 240 4.9% 83.9%;              /* #d4d4d8 zinc-300 */
+
+    --radius: 0.5rem;
+  }
+
+  .light {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 240 5.9% 10%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    background-color: #09090b; /* zinc-950 canvas */
+  }
+}
+
+/* Tabular numbers for all statistics & metrics */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Smooth Interactive Transitions */
+.card-hover-effect {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.card-hover-effect:hover {
+  border-color: rgba(161, 161, 170, 0.3);
+}
+
+.smooth-transition {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes viewFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.view-transition,
+.animate-page-enter {
+  animation: viewFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* SVG Chart paths smooth morphing */
+svg path {
+  transition: d 0.3s cubic-bezier(0.16, 1, 0.3, 1), stroke 0.3s ease;
+}
+
+/* Custom subtle scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(161, 161, 170, 0.2);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(161, 161, 170, 0.4);
+}
