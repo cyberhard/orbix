@@ -397,18 +397,18 @@ export const HardwareCatalog: React.FC = () => {
           <Card className="border-zinc-800 bg-zinc-950 p-6 space-y-4">
             <div>
               <h3 className="text-base font-bold text-zinc-100 flex items-center gap-2">
-                <Terminal className="h-5 w-5 text-purple-400" />
+                <Terminal className="h-5 w-5 text-zinc-400" />
                 <span>{isRu ? "Установка на уже работающий OpenWrt" : "Install on Existing OpenWrt Router"}</span>
               </h3>
               <p className="text-zinc-400 mt-1">
                 {isRu
-                  ? "Если на вашем роутере уже установлена стандартная OpenWrt, вы можете развернуть Modern Panel одной командой по SSH:"
-                  : "If your router already runs OpenWrt, deploy Modern Panel via SSH with one command:"}
+                  ? "Если на вашем роутере уже установлена стандартная OpenWrt, вы можете развернуть ORBIX одной командой по SSH:"
+                  : "If your router already runs OpenWrt, deploy ORBIX via SSH with one command:"}
               </p>
             </div>
 
             <div className="p-3 bg-zinc-900 font-mono text-zinc-200 rounded-lg border border-zinc-800 flex items-center justify-between">
-              <code>curl -sSL https://raw.githubusercontent.com/openwrt-modern-panel/panel/main/scripts/install.sh | sh</code>
+              <code>curl -sSL https://raw.githubusercontent.com/cyberhard/orbix/main/scripts/install.sh | sh</code>
             </div>
 
             <div className="space-y-2 text-zinc-400 leading-relaxed">

@@ -203,10 +203,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, onSelectRoute, i
               <Router className="h-4 w-4" />
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-semibold tracking-tight text-zinc-100 flex items-center gap-1.5">
-                OpenWrt <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800">25.12</span>
+              <span className="text-sm font-bold tracking-tight text-zinc-100 flex items-center gap-1.5">
+                ORBIX <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800">25.12</span>
               </span>
-              <span className="text-[10px] text-zinc-500 font-mono">Modern Admin UI</span>
+              <span className="text-[10px] text-zinc-500 font-mono">OpenWrt Platform</span>
             </div>
           </div>
 

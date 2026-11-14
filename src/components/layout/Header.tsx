@@ -61,7 +61,7 @@ export const Header: React.FC<HeaderProps> = ({
           <Menu className="h-4 w-4" />
         </Button>
         <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-          <span className="hidden sm:inline text-xs text-zinc-500 font-mono">OpenWrt</span>
+          <span className="hidden sm:inline text-xs text-zinc-400 font-bold font-mono tracking-wide">ORBIX</span>
           <span className="hidden sm:inline text-zinc-700 text-xs">/</span>
           <h2 className="text-xs font-medium tracking-tight text-zinc-100 truncate max-w-[120px] sm:max-w-none">
             {currentRouteTitle}

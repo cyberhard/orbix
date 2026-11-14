@@ -1,7 +1,7 @@
 #!/bin/sh
-# OpenWrt Modern Panel - Guided Universal One-Line Installer
+# ORBIX - OpenWrt Network Management Platform Universal Installer
 # Supports OpenWrt 21.02, 22.03, 23.05, 24.10, and 25.12+ (apk & opkg)
-# Usage: curl -sSL https://raw.githubusercontent.com/.../install.sh | sh
+# Usage: curl -sSL https://raw.githubusercontent.com/cyberhard/orbix/main/scripts/install.sh | sh
 
 set -e
 
@@ -12,7 +12,7 @@ COLOR_RED='\033[0;31m'
 COLOR_RESET='\033[0m'
 
 echo -e "${COLOR_CYAN}======================================================${COLOR_RESET}"
-echo -e "${COLOR_GREEN}      OpenWrt Modern Panel - Universal Installer      ${COLOR_RESET}"
+echo -e "${COLOR_GREEN}          ORBIX - OpenWrt Platform Installer         ${COLOR_RESET}"
 echo -e "${COLOR_CYAN}======================================================${COLOR_RESET}"
 
 # 1. Check Root
@@ -84,7 +84,7 @@ elif [ -f "./rpcd/circumvention" ]; then
 else
     # Fetch from repository if run via curl pipe
     echo "Downloading rpcd backend script..."
-    curl -sSL "https://raw.githubusercontent.com/openwrt-modern-panel/panel/main/rpcd-circumvention.sh" -o /usr/libexec/rpcd/circumvention || true
+    curl -sSL "https://raw.githubusercontent.com/cyberhard/orbix/main/rpcd-circumvention.sh" -o /usr/libexec/rpcd/circumvention || true
 fi
 
 chmod +x /usr/libexec/rpcd/circumvention
@@ -128,14 +128,14 @@ EOF
 fi
 
 # 7. Deploy Frontend Web UI
-echo -e "\n${COLOR_CYAN}--> Step 3/4: Deploying Modern Panel Web UI...${COLOR_RESET}"
+echo -e "\n${COLOR_CYAN}--> Step 3/4: Deploying ORBIX Web UI...${COLOR_RESET}"
 mkdir -p /www
 
 if [ -d "./dist" ]; then
     cp -rf ./dist/* /www/
 else
-    echo "Downloading and extracting latest pre-built panel bundle..."
-    curl -sSL "https://github.com/openwrt-modern-panel/panel/releases/latest/download/panel-dist.tar.gz" | tar -C /www -xzf - 2>/dev/null || true
+    echo "Downloading and extracting latest pre-built ORBIX bundle..."
+    curl -sSL "https://github.com/cyberhard/orbix/releases/latest/download/orbix-dist.tar.gz" | tar -C /www -xzf - 2>/dev/null || true
 fi
 
 # 8. Configure Web Server & Firewall
@@ -161,7 +161,7 @@ else
 fi
 
 echo -e "\n${COLOR_GREEN}======================================================${COLOR_RESET}"
-echo -e "${COLOR_GREEN}  Installation Successful! OpenWrt Modern Panel Ready ${COLOR_RESET}"
+echo -e "${COLOR_GREEN}          Installation Successful! ORBIX Ready        ${COLOR_RESET}"
 echo -e "${COLOR_GREEN}======================================================${COLOR_RESET}"
 echo -e "Open your browser and visit: ${COLOR_CYAN}http://192.168.1.1/#/overview${COLOR_RESET}"
 echo -e "To launch initial setup:     ${COLOR_CYAN}http://192.168.1.1/#/wizard${COLOR_RESET}\n"

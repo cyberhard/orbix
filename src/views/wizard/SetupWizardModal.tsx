@@ -140,7 +140,7 @@ export const SetupWizardModal: React.FC = () => {
             <div className="space-y-6">
               <div className="text-center max-w-lg mx-auto space-y-2">
                 <h2 className="text-lg font-bold text-zinc-100">
-                  {isRu ? "Добро пожаловать в OpenWrt Modern Panel!" : "Welcome to OpenWrt Modern Panel!"}
+                  {isRu ? "Добро пожаловать в ORBIX!" : "Welcome to ORBIX!"}
                 </h2>
                 <p className="text-zinc-400 leading-relaxed text-xs">
                   {isRu

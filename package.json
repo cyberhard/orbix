@@ -1,7 +1,11 @@
 {
-  "name": "openwrt-modern-panel",
+  "name": "orbix",
   "version": "1.0.0",
-  "description": "",
+  "description": "ORBIX - OpenWrt Network Management Platform",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cyberhard/orbix.git"
+  },
   "main": "index.js",
   "scripts": {
     "dev": "vite",

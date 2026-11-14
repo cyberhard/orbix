@@ -39,7 +39,7 @@ FULL_PACKAGES=(
 )
 
 echo "=========================================================="
-echo "  OpenWrt Modern Panel - Automated Firmware Build System  "
+echo "          ORBIX - Automated Firmware Build System         "
 echo "  Target Release: OpenWrt ${OPENWRT_VERSION}             "
 echo "=========================================================="
 
