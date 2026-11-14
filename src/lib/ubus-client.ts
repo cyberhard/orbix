@@ -74,7 +74,11 @@ class UbusClient {
       const json: UbusRpcResponse<T> = await res.json();
 
       if (json.error) {
-        if (json.error.message === "Access denied" || json.error.code === -32002) {
+        // Only invalidate session if core session or system call was rejected
+        if (
+          (json.error.message === "Access denied" || json.error.code === -32002) &&
+          (object === "session" || (object === "system" && method === "board"))
+        ) {
           this.sessionId = "00000000000000000000000000000000";
           if (typeof window !== "undefined") {
             localStorage.removeItem("openwrt_session_id");
@@ -90,14 +94,14 @@ class UbusClient {
 
       const [status, data] = json.result;
       if (status !== 0) {
-        if (status === 6) {
-          // UBUS_STATUS_PERMISSION_DENIED
+        if (status === 6 && (object === "session" || (object === "system" && method === "board"))) {
+          // UBUS_STATUS_PERMISSION_DENIED on core session/system object
           this.sessionId = "00000000000000000000000000000000";
           if (typeof window !== "undefined") {
             localStorage.removeItem("openwrt_session_id");
             window.dispatchEvent(new CustomEvent("ubus_auth_expired"));
           }
-          throw new Error("Session expired or permission denied. Please log in again.");
+          throw new Error("Session expired. Please log in again.");
         }
         throw new Error(`Ubus call returned error code: ${status}`);
       }

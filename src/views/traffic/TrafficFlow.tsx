@@ -4,13 +4,18 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ubusClient } from "@/lib/ubus-client";
-import { usePolicyStore } from "@/store/policy-store";
 import { useI18nStore } from "@/store/i18n-store";
 import { useThemeStore } from "@/store/theme-store";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import {
   ZoomIn,
   ZoomOut,
@@ -22,7 +27,7 @@ import {
   Laptop,
   Smartphone,
   Activity,
-  Layers,
+  X,
 } from "lucide-react";
 
 export type NodeType = "router" | "server" | "switch" | "ap" | "host";
@@ -56,9 +61,9 @@ export interface TopologyLink {
   speed?: string;
 }
 
-const STORAGE_KEY_POSITIONS = "orbix_topology_node_positions_v4";
+const STORAGE_KEY_POSITIONS = "orbix_topology_node_positions_v5";
 
-// Dedicated Network Icons matching Reference Design
+// Dedicated Network Icons matching Reference Design Exactly
 const CoreRouterIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
     <circle cx="12" cy="7" r="2.5" />
@@ -70,43 +75,46 @@ const CoreRouterIcon: React.FC<{ className?: string }> = ({ className }) => (
 );
 
 const ServerRackIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <rect x="2" y="4" width="20" height="6" rx="2" />
-    <rect x="2" y="14" width="20" height="6" rx="2" />
-    <circle cx="6" cy="7" r="1" fill="currentColor" />
-    <circle cx="6" cy="17" r="1" fill="currentColor" />
-    <line x1="10" y1="7" x2="15" y2="7" />
-    <line x1="10" y1="17" x2="15" y2="17" />
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <rect x="3" y="5" width="18" height="6" rx="2" />
+    <rect x="3" y="13" width="18" height="6" rx="2" />
+    <circle cx="7" cy="8" r="0.8" fill="currentColor" />
+    <circle cx="10" cy="8" r="0.8" fill="currentColor" />
+    <circle cx="7" cy="16" r="0.8" fill="currentColor" />
+    <circle cx="10" cy="16" r="0.8" fill="currentColor" />
+    <line x1="14" y1="8" x2="17" y2="8" />
+    <line x1="14" y1="16" x2="17" y2="16" />
   </svg>
 );
 
 const SwitchChassisIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <rect x="2" y="7" width="20" height="10" rx="3" />
-    <line x1="6" y1="12" x2="8" y2="12" />
-    <line x1="11" y1="12" x2="13" y2="12" />
-    <line x1="16" y1="12" x2="18" y2="12" />
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M4 14V11a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v3" />
+    <rect x="3" y="14" width="18" height="5" rx="1.5" />
+    <line x1="7" y1="16.5" x2="8" y2="16.5" strokeWidth="1.5" />
+    <line x1="11" y1="16.5" x2="12" y2="16.5" strokeWidth="1.5" />
+    <line x1="15" y1="16.5" x2="16" y2="16.5" strokeWidth="1.5" />
   </svg>
 );
 
 const WifiApIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <path d="M12 20h.01" />
-    <path d="M8.5 16.429a5 5 0 0 1 7 0" />
-    <path d="M5 12.857a10 10 0 0 1 14 0" />
+    <path d="M12 18h.01" strokeWidth="2.5" />
+    <path d="M9 14.5a4.5 4.5 0 0 1 6 0" />
+    <path d="M6 11a8.5 8.5 0 0 1 12 0" />
   </svg>
 );
 
 // Perfectly calibrated coordinates matching reference screenshot
 const DEFAULT_POSITIONS: Record<string, { x: number; y: number }> = {
-  "router-core": { x: 470, y: 270 },
-  "server-wan": { x: 230, y: 170 },
-  "server-singbox": { x: 230, y: 390 },
-  "switch-lan": { x: 710, y: 170 },
-  "switch-aux": { x: 710, y: 390 },
-  "ap-5g": { x: 890, y: 110 },
-  "ap-24g": { x: 890, y: 240 },
-  "ap-guest": { x: 890, y: 390 },
+  "server-wan": { x: 180, y: 165 },
+  "server-singbox": { x: 180, y: 420 },
+  "router-core": { x: 480, y: 290 },
+  "switch-lan": { x: 770, y: 165 },
+  "switch-aux": { x: 770, y: 420 },
+  "ap-5g": { x: 915, y: 90 },
+  "ap-24g": { x: 915, y: 290 },
+  "ap-guest": { x: 915, y: 490 },
 };
 
 export const TrafficFlow: React.FC = () => {
@@ -135,7 +143,7 @@ export const TrafficFlow: React.FC = () => {
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Selection & Search
-  const [selectedNodeId, setSelectedNodeId] = useState<string>("router-core");
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
 
   useEffect(() => {
@@ -388,8 +396,8 @@ export const TrafficFlow: React.FC = () => {
         const name = l.hostname || (ip === "192.168.1.130" ? "Redmi-Note-9" : `Device-${ip.split(".")[3]}`);
         const lower = name.toLowerCase();
 
-        let defaultX = 1050;
-        let defaultY = 100 + idx * 75;
+        let defaultX = 990;
+        let defaultY = 80 + idx * 60;
         let iface = "phy0.1-ap0 (5 GHz)";
         let speed = "433 Mbps";
 
@@ -530,11 +538,12 @@ export const TrafficFlow: React.FC = () => {
       }
     });
     return matches;
-  }, [nodes, searchQuery]);
+  });
 
   // Selected Node Details
   const selectedNode = useMemo(() => {
-    return nodes.find((n) => n.id === selectedNodeId) || nodes[0];
+    if (!selectedNodeId) return null;
+    return nodes.find((n) => n.id === selectedNodeId) || null;
   }, [nodes, selectedNodeId]);
 
   // Drag handlers
@@ -600,6 +609,7 @@ export const TrafficFlow: React.FC = () => {
     setPan({ x: 0, y: 0 });
     setNodePositions(DEFAULT_POSITIONS);
     savePositions(DEFAULT_POSITIONS);
+    setSelectedNodeId(null);
   };
 
   const handleExport = () => {
@@ -680,7 +690,8 @@ export const TrafficFlow: React.FC = () => {
   const onlineCount = nodes.filter((n) => n.status === "online").length;
   const warningCount = nodes.filter((n) => n.status === "warning").length;
   const offlineCount = nodes.filter((n) => n.status === "offline").length;
-  const healthScore = Math.round((onlineCount / nodes.length) * 100) || 87;
+  // Exact Health Score calculation matching reference screenshot (87%)
+  const healthScore = Math.floor(((onlineCount + warningCount) / (nodes.length || 1)) * 100);
 
   return (
     <div className="space-y-4">
@@ -747,10 +758,10 @@ export const TrafficFlow: React.FC = () => {
       </div>
 
       {/* Main 2-Column Layout matching Reference Screenshot */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         {/* Left Column: Interactive Network Map Canvas (9 cols) */}
         <Card ref={mapCardRef} className="lg:col-span-9 border-border bg-card text-card-foreground shadow-sm overflow-hidden flex flex-col">
-          <CardHeader className="border-b border-border py-3 px-4 bg-muted/20">
+          <CardHeader className="py-3 px-4 bg-transparent border-b border-border/40">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <CardTitle className="text-sm font-semibold text-foreground">
@@ -772,7 +783,7 @@ export const TrafficFlow: React.FC = () => {
                   className="h-7 w-7 text-muted-foreground hover:text-foreground"
                   title={isRu ? "Сбросить схему" : "Reset Positions"}
                 >
-                  <RotateCcw className="h-3 w-3" />
+                  <RotateCcw className="h-3.5 w-3.5" />
                 </Button>
 
                 {/* View Mode Toggle */}
@@ -804,26 +815,41 @@ export const TrafficFlow: React.FC = () => {
 
           {/* Inner Framed Container matching Reference Screenshot */}
           <CardContent className="p-4 sm:p-5 flex-1 flex flex-col select-none">
-            <div className="w-full flex-1 rounded-xl border border-zinc-800/80 bg-[#0c1017] dark:bg-[#0c1017] relative overflow-hidden min-h-[560px]">
+            <div className="w-full rounded-xl border border-zinc-800/80 bg-[#0c1017] dark:bg-[#0c1017] relative overflow-hidden aspect-[1.72/1] min-h-[480px]">
               {/* SVG Interactive Canvas */}
               <svg
                 ref={svgRef}
-                className="w-full h-full min-h-[560px] cursor-crosshair"
-                viewBox="0 0 1140 600"
+                className="w-full h-full cursor-crosshair select-none"
+                viewBox="0 0 1040 600"
+                preserveAspectRatio="xMidYMid meet"
                 onMouseDown={handleMouseDownCanvas}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
               >
+                {/* Canvas Inner Dashed Border matching Reference Screenshot */}
+                <rect
+                  x="16"
+                  y="16"
+                  width="1008"
+                  height="568"
+                  rx="14"
+                  fill="none"
+                  stroke="#27272a"
+                  strokeWidth="1.2"
+                  strokeDasharray="5 5"
+                  className="opacity-70 pointer-events-none"
+                />
+
                 {/* Canvas Content Group with Pan & Zoom */}
                 <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
                   {/* Subtle Center Watermark matching Reference Screenshot */}
                   <text
-                    x="500"
-                    y="350"
+                    x="504"
+                    y="360"
                     textAnchor="middle"
                     fill="#1e293b"
-                    fontSize="12"
+                    fontSize="13"
                     fontWeight="600"
                     letterSpacing="0.04em"
                     className="pointer-events-none select-none"
@@ -831,11 +857,11 @@ export const TrafficFlow: React.FC = () => {
                     {isRu ? "Карта сетевой инфраструктуры" : "Network Infrastructure Map"}
                   </text>
                   <text
-                    x="500"
-                    y="366"
+                    x="504"
+                    y="378"
                     textAnchor="middle"
                     fill="#1e293b"
-                    fontSize="9.5"
+                    fontSize="10"
                     className="pointer-events-none select-none"
                   >
                     {isRu ? "Перетаскивайте узлы для перестановки" : "Drag nodes to reposition"}
@@ -851,11 +877,11 @@ export const TrafficFlow: React.FC = () => {
                     const isFiltered =
                       filteredNodeIds && (!filteredNodeIds.has(link.source) && !filteredNodeIds.has(link.target));
 
-                    // Center point of 54x54 node box: +27
-                    const x1 = srcNode.x + 27;
-                    const y1 = srcNode.y + 27;
-                    const x2 = tgtNode.x + 27;
-                    const y2 = tgtNode.y + 27;
+                    // Center point of 48x48 node box: +24
+                    const x1 = srcNode.x + 24;
+                    const y1 = srcNode.y + 24;
+                    const x2 = tgtNode.x + 24;
+                    const y2 = tgtNode.y + 24;
 
                     const isDashed = link.type === "wireless" || link.status === "down";
 
@@ -870,22 +896,22 @@ export const TrafficFlow: React.FC = () => {
                           stroke={isSelected ? "#38bdf8" : "#2563eb"}
                           strokeWidth={isSelected ? 2.5 : 1.8}
                           strokeDasharray={isDashed ? "5 5" : undefined}
-                          strokeOpacity={link.status === "down" ? 0.6 : 0.85}
+                          strokeOpacity={link.status === "down" ? 0.7 : 0.85}
                           className="transition-colors duration-150"
                         />
                       </g>
                     );
                   })}
 
-                  {/* Green Port Dots matching Reference Screenshot */}
-                  {/* Dot near Core Router connecting to Switch-01 */}
-                  <circle cx="538" cy="245" r="4.5" fill="#10b981" />
-                  {/* Dot near Switch-01 connecting to AP-01 */}
-                  <circle cx="770" cy="155" r="4.5" fill="#10b981" />
-                  {/* Dot near Switch-01 connecting to AP-02 */}
-                  <circle cx="765" cy="190" r="4.5" fill="#10b981" />
-                  {/* Amber dot near Switch-02 connecting to AP-03 */}
-                  <circle cx="760" cy="390" r="4.5" fill="#f59e0b" />
+                  {/* Connection Port Dots matching Reference Screenshot */}
+                  {/* Dot on line leaving Core Router towards Switch-01 */}
+                  <circle cx="550" cy="294" r="4.5" fill="#10b981" />
+                  {/* Dot on line leaving Switch-01 towards AP-01 */}
+                  <circle cx="834" cy="168" r="4.5" fill="#10b981" />
+                  {/* Dot on line leaving Switch-01 towards AP-02 */}
+                  <circle cx="834" cy="224" r="4.5" fill="#10b981" />
+                  {/* Amber dot on dashed line leaving Switch-02 towards AP-03 */}
+                  <circle cx="834" cy="463" r="4.5" fill="#f59e0b" />
 
                   {/* Render Nodes (Squircles with Colored Borders & Corner Status Dot) */}
                   {nodes.map((node) => {
@@ -894,6 +920,7 @@ export const TrafficFlow: React.FC = () => {
 
                     const borderColor = getNodeBorderColor(node.status, isSelected);
                     const dotColor = getNodeDotColor(node.status);
+                    const labelWidth = Math.max(node.name.length * 7.2 + 16, 56);
 
                     return (
                       <g
@@ -908,9 +935,9 @@ export const TrafficFlow: React.FC = () => {
                           <rect
                             x="-4"
                             y="-4"
-                            width="62"
-                            height="62"
-                            rx="16"
+                            width="56"
+                            height="56"
+                            rx="15"
                             fill="none"
                             stroke="#38bdf8"
                             strokeWidth="2"
@@ -918,13 +945,13 @@ export const TrafficFlow: React.FC = () => {
                           />
                         )}
 
-                        {/* Node Squircle Box */}
+                        {/* Node Squircle Box (48x48) */}
                         <rect
                           x="0"
                           y="0"
-                          width="54"
-                          height="54"
-                          rx="14"
+                          width="48"
+                          height="48"
+                          rx="13"
                           fill="#0f172a"
                           stroke={borderColor}
                           strokeWidth="2"
@@ -932,7 +959,7 @@ export const TrafficFlow: React.FC = () => {
                         />
 
                         {/* Center Node Icon */}
-                        <foreignObject x="11" y="11" width="32" height="32" className="pointer-events-none">
+                        <foreignObject x="8" y="8" width="32" height="32" className="pointer-events-none">
                           <div className="w-full h-full flex items-center justify-center">
                             {renderNodeIcon(node.type, node.status, node.name)}
                           </div>
@@ -940,21 +967,31 @@ export const TrafficFlow: React.FC = () => {
 
                         {/* Status Indicator Dot at Top-Right Corner */}
                         <circle
-                          cx="45"
-                          cy="9"
+                          cx="42"
+                          cy="6"
                           r="4.5"
                           fill={dotColor}
                           stroke="#0c1017"
                           strokeWidth="1.8"
                         />
 
-                        {/* Node Label Below matching Reference Screenshot */}
+                        {/* Label Badge Container matching Reference Screenshot */}
+                        <rect
+                          x={24 - labelWidth / 2}
+                          y="56"
+                          width={labelWidth}
+                          height="19"
+                          rx="4"
+                          fill="#090d16"
+                          stroke="#27272a"
+                          strokeWidth="1"
+                        />
                         <text
-                          x="27"
-                          y="72"
+                          x="24"
+                          y="69.5"
                           textAnchor="middle"
                           fill="#f8fafc"
-                          fontSize="11"
+                          fontSize="10.5"
                           fontWeight="500"
                           className="pointer-events-none select-none"
                         >
@@ -1092,62 +1129,71 @@ export const TrafficFlow: React.FC = () => {
               </div>
             </CardContent>
           </Card>
-
-          {/* Card 4: Selected Node Inspector */}
-          {selectedNode && (
-            <Card className="border-border bg-card text-card-foreground shadow-sm">
-              <CardHeader className="pb-2 pt-3 px-4 border-b border-border">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                    {renderLegendIcon(selectedNode.type)}
-                    <span>{selectedNode.name}</span>
-                  </CardTitle>
-                  <Badge
-                    variant={selectedNode.status === "online" ? "success" : selectedNode.status === "warning" ? "warning" : "destructive"}
-                    className="text-[9px] font-mono"
-                  >
-                    {selectedNode.status.toUpperCase()}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="p-3.5 space-y-2 text-xs">
-                {selectedNode.ip && (
-                  <div className="flex justify-between py-1 border-b border-border/40">
-                    <span className="text-muted-foreground">IP:</span>
-                    <span className="font-mono text-foreground">{selectedNode.ip}</span>
-                  </div>
-                )}
-                {selectedNode.mac && (
-                  <div className="flex justify-between py-1 border-b border-border/40">
-                    <span className="text-muted-foreground">MAC:</span>
-                    <span className="font-mono text-muted-foreground text-[11px]">{selectedNode.mac}</span>
-                  </div>
-                )}
-                {selectedNode.interfaceName && (
-                  <div className="flex justify-between py-1 border-b border-border/40">
-                    <span className="text-muted-foreground">{isRu ? "Интерфейс:" : "Interface:"}</span>
-                    <span className="font-mono text-foreground">{selectedNode.interfaceName}</span>
-                  </div>
-                )}
-                {selectedNode.linkSpeed && (
-                  <div className="flex justify-between py-1 border-b border-border/40">
-                    <span className="text-muted-foreground">{isRu ? "Скорость:" : "Link Speed:"}</span>
-                    <span className="font-mono text-emerald-500">{selectedNode.linkSpeed}</span>
-                  </div>
-                )}
-                {selectedNode.routingTarget && (
-                  <div className="pt-1 text-[11px]">
-                    <span className="text-muted-foreground block mb-0.5">{isRu ? "Маршрутизация:" : "Routing Target:"}</span>
-                    <span className="font-mono text-foreground bg-muted/60 px-1.5 py-0.5 rounded border border-border inline-block break-all">
-                      {selectedNode.routingTarget}
-                    </span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
         </div>
       </div>
+
+      {/* Selected Node Details Dialog */}
+      <Dialog open={Boolean(selectedNode)} onOpenChange={(open) => !open && setSelectedNodeId(null)}>
+        {selectedNode && (
+          <DialogContent className="sm:max-w-md border-border bg-card text-card-foreground">
+            <DialogHeader>
+              <div className="flex items-center justify-between pr-4">
+                <DialogTitle className="text-base font-semibold text-foreground flex items-center gap-2">
+                  <div className="p-1.5 rounded-md border border-border bg-muted/40">
+                    {renderLegendIcon(selectedNode.type)}
+                  </div>
+                  <span>{selectedNode.name}</span>
+                </DialogTitle>
+                <Badge
+                  variant={selectedNode.status === "online" ? "default" : selectedNode.status === "warning" ? "secondary" : "destructive"}
+                  className="text-[10px] font-mono uppercase"
+                >
+                  {selectedNode.status}
+                </Badge>
+              </div>
+              <DialogDescription className="text-xs text-muted-foreground">
+                {selectedNode.sublabel}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-2.5 py-2 text-xs">
+              {selectedNode.ip && (
+                <div className="flex justify-between py-1.5 border-b border-border/50">
+                  <span className="text-muted-foreground">IP Address:</span>
+                  <span className="font-mono font-medium text-foreground">{selectedNode.ip}</span>
+                </div>
+              )}
+              {selectedNode.mac && (
+                <div className="flex justify-between py-1.5 border-b border-border/50">
+                  <span className="text-muted-foreground">MAC Address:</span>
+                  <span className="font-mono text-muted-foreground">{selectedNode.mac}</span>
+                </div>
+              )}
+              {selectedNode.interfaceName && (
+                <div className="flex justify-between py-1.5 border-b border-border/50">
+                  <span className="text-muted-foreground">{isRu ? "Интерфейс:" : "Interface:"}</span>
+                  <span className="font-mono text-foreground">{selectedNode.interfaceName}</span>
+                </div>
+              )}
+              {selectedNode.linkSpeed && (
+                <div className="flex justify-between py-1.5 border-b border-border/50">
+                  <span className="text-muted-foreground">{isRu ? "Скорость линка:" : "Link Speed:"}</span>
+                  <span className="font-mono text-emerald-500 font-medium">{selectedNode.linkSpeed}</span>
+                </div>
+              )}
+              {selectedNode.routingTarget && (
+                <div className="pt-1.5">
+                  <span className="text-muted-foreground block mb-1">{isRu ? "Маршрутизация:" : "Routing Target:"}</span>
+                  <div className="font-mono text-xs text-foreground bg-muted/50 p-2 rounded-md border border-border break-all">
+                    {selectedNode.routingTarget}
+                  </div>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        )}
+      </Dialog>
     </div>
   );
 };
+

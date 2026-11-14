@@ -372,7 +372,7 @@ export const HardwareCatalog: React.FC = () => {
                 </div>
                 <p className="text-zinc-400 leading-relaxed">
                   {isRu
-                    ? "Подключите компьютер к роутеру по кабелю Ethernet (порт LAN 1). Откройте админку роутера, перейдите в «Обновление ПО», выберите скачанный файл `factory.bin` и нажмите «Обновить». Не выключайте питание роутера в течение 5 минут!"
+                    ? "Подключите компьютер к роутеру по кабелю Ethernet (порт LAN 1). Откройте веб-интерфейс роутера, перейдите в «Обновление ПО», выберите скачанный файл `factory.bin` и нажмите «Обновить». Не выключайте питание роутера в течение 5 минут!"
                     : "Connect via Ethernet to LAN 1. In OEM settings find Firmware Upgrade, select `factory.bin`. Do not power off for 5 minutes!"}
                 </p>
               </div>

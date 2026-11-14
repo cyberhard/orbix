@@ -1,4 +1,4 @@
-# ORBIX • OpenWrt Network Management Platform
+# ORBIX
 
 [![OpenWrt Version](https://img.shields.io/badge/OpenWrt-25.12%20%2F%2024.10%20%2F%2023.05-blue.svg)](https://openwrt.org)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev)
@@ -10,7 +10,7 @@
 
 [**Читать на русском (README.ru.md)**](README.ru.md)
 
-A next-generation, high-performance web administration interface and network management platform for **OpenWrt routers**, designed with strict **shadcn/ui zinc** aesthetics. 
+A universal, high-performance network management platform for **OpenWrt routers**, designed with strict **shadcn/ui zinc** aesthetics. 
 
 **ORBIX** transforms OpenWrt into an intuitive, visual, and secure networking platform for both home users and network engineers. Built directly on top of OpenWrt's native **ubus**, **UCI**, and **sysfs** architecture with **zero mocks or stubs**.
 
@@ -38,19 +38,19 @@ sh -c "$(wget -qO- https://raw.githubusercontent.com/cyberhard/orbix/main/script
 
 ### 1. Interactive Network Topology & Infrastructure Map (`#/traffic`)
 Real-time Cisco Packet Tracer-style interactive topology view. Drag-and-drop nodes with live cable recalculation, port status indicators, and instant node inspection.
-![ORBIX Network Topology](docs/images/topology-macos.png)
+![ORBIX Network Topology](docs/images/topology-en-macos.png)
 
 ### 2. Overview Dashboard & Telemetry (`#/overview`)
-Real-time CPU, RAM, Flash, active DHCP leases with correct pluralization, WAN status, and smooth SVG throughput graph with time range selector.
-![ORBIX Overview Dashboard](docs/images/overview-macos.png)
+Real-time CPU, RAM, Flash, active DHCP leases with correct pluralization, WAN status, network security guard, and smooth SVG throughput graph with time range selector.
+![ORBIX Overview Dashboard](docs/images/overview-en-macos.png)
 
 ### 3. Unified Policy-Based Routing Engine (`#/policies`)
 Dual-mode policy manager (Simple Mode for beginners, Expert Mode for network architects) translating natural requirements into atomic `nftables`, `pbr`, and `zapret` rules.
-![ORBIX Policy Engine](docs/images/policies-macos.png)
+![ORBIX Policy Engine](docs/images/policies-en-macos.png)
 
 ### 4. Hardware Catalog & Universal Firmware Portal (`#/install`)
 Pre-compiled OpenWrt images, SHA-256 checksums, and step-by-step flashing guides for MediaTek Filogic, x86/64, and Qualcomm routers.
-![ORBIX Hardware Catalog](docs/images/catalog-macos.png)
+![ORBIX Hardware Catalog](docs/images/catalog-en-macos.png)
 
 ---
 
@@ -68,88 +68,89 @@ Pre-compiled OpenWrt images, SHA-256 checksums, and step-by-step flashing guides
 - **7-Step Guided Setup**:
   1. **Welcome**: Choose between **Simple Mode** (safe defaults) and **Expert Mode** (full network control).
   2. **Hardware Detection**: Auto-detects router model, SoC, RAM, flash overlay, network ports, and DPI/VPN acceleration.
-  3. **Internet (WAN/LAN)**: IPoE/DHCP, PPPoE, Static IP with **Subnet Collision Resolver** (auto-shifts LAN to `192.168.2.1` if ISP assigns `192.168.1.x`).
-  4. **Wi-Fi Radios**: Band Steering (Smart Connect 2.4G/5G), WPA2/WPA3 Mixed encryption, and isolated Guest Network.
-  5. **Security & SSH**: Root password strength meter and Dropbear SSH hardening (LAN-only binding).
-  6. **Bypass & Core Services**: One-click enable for Zapret2 (ALT11 strategy), RuNet Direct routing, Smart DNS, and VLESS Reality.
-  7. **Safety Rollback Watchdog**: 75-second countdown timer reverts configuration if client connectivity is dropped.
+  3. **Internet & LAN Setup**: DHCP, PPPoE, or Static IP with **Automatic Subnet Collision Resolution** (if upstream WAN issues `192.168.1.x`, LAN automatically migrates to `192.168.2.1`).
+  4. **Wireless (Wi-Fi)**: Smart Connect unified SSID (2.4G/5G), WPA2/WPA3 security, and isolated guest network.
+  5. **Security & SSH**: Root password strength validation and LAN-only SSH enforcement.
+  6. **Circumvention & Services**: One-click Zapret2 ALT11 enablement, RuNet direct bypass, Smart DNS, and VLESS Reality.
+  7. **Rollback Watchdog**: 75-second countdown timer. If network connectivity is lost during configuration, changes automatically revert to safe state.
 
-### 3. Full Configuration JSON Backup & Migration (`#/backup`)
-- **Versioned JSON Schema** (`orbix-config` v1): Covers General, Network, Devices, Policies, VPN, DNS, Zapret, Firewall, and Lists.
-- **Safe Export vs Encrypted Full Backup**: Scrubbed secrets for public sharing or **AES-256-GCM** (PBKDF2 10k iterations) encrypted backup with pure TypeScript fallback for plain HTTP (`http://192.168.1.1`).
-- **Cross-Device Migration Engine**: Automatically resolves hardware differences and subnet conflicts when restoring to a different router model.
-- **Restoration Modes**: Merge, Replace, or Selective section restore.
+### 3. Full Configuration Export/Import (`#/backup`)
+- **Versioned JSON Schema** (`orbix-config` v1): Complete backup of networks, devices, policies, category feeds, VPN endpoints, and firewall rules.
+- **Encrypted Backups**: Export with sanitized secrets for sharing, or encrypted with **AES-256-GCM** (fully operational over plain HTTP at `http://192.168.1.1`).
+- **Cross-Hardware Migration**: Smart interface mapping when restoring a configuration to a different router model.
+- **Selective Restore**: Merge, overwrite, or selectively restore individual configuration domains.
 
-### 4. DPI Circumvention & Traffic Routing Suite
-- **Zapret2 DPI Bypass**: Embedded `nfqws` engine running the battle-tested **ALT11 strategy** (`fake`, `disorder`, `multisplit`, `badseq`) for YouTube 1080p/4K and Discord voice unblocking.
-- **RuNet Direct Routing**: Automatic direct unthrottled path for Russian services (.ru, .рф, banking, Gosuslugi) bypassing VPN tunnels.
-- **Smart DNS Resolver**: Split-horizon resolution using Yandex DNS for domestic services and secure Google DoH/DoT for international domains.
-- **Sing-box VLESS / Reality & AmneziaWG**: High-speed fallback proxy and obfuscated WireGuard tunnel (`Jc`, `Jmin`, `Jmax`, `S1`, `S2`, `H1–H4`).
-- **Happ VPN Subscriptions**: Universal decoder for `happ://` and `https://` provider URLs with latency-based auto failover.
+### 4. Advanced Circumvention & Smart Routing Engine
+- **Zapret2 DPI Circumvention**: Built-in `nfqws` daemon with pre-tuned **ALT11** strategy (`fake`, `disorder`, `multisplit`, `badseq`) for uninterrupted 4K YouTube and Discord voice.
+- **RuNet Direct Route**: Zero-latency direct bypass for domestic Russian services (.ru, .рф, banking, Gosuslugi).
+- **Smart DNS Router**: Split-horizon resolution using fast Yandex DNS for domestic queries and encrypted Google/Cloudflare DoH/DoT for all other domains.
+- **Sing-box VLESS Reality & AmneziaWG**: Modern high-performance proxy and obfuscated WireGuard with anti-detection headers (`Jc`, `Jmin`, `Jmax`, `S1`, `S2`, `H1–H4`).
+- **Happ VPN Subscriptions**: Universal parser for `happ://` and HTTPS subscription feeds with latency probing and auto-failover.
 
-### 5. Universal Distribution & Hardware Catalog (`#/install`)
-- Tested device profiles for MediaTek Filogic (**Netcraze NC-1812**, **Cudy WR3000**, **Xiaomi AX3000T**, **GL-MT3000**), **x86/64**, and Qualcomm IPQ40xx.
-- Beginner-friendly flashing guide (Factory vs Sysupgrade, TFTP / U-Boot recovery).
-- Automated ImageBuilder pipeline (`scripts/build-firmware.sh`) with SHA-256 checksums.
+### 5. Hardware Catalog & Universal Distribution (`#/install`)
+- Tested hardware profiles for MediaTek Filogic (**Netcraze NC-1812**, **Cudy WR3000**, **Xiaomi AX3000T**, **GL-MT3000**), **x86/64**, and Qualcomm IPQ40xx.
+- Flashing guides for beginners (Factory vs Sysupgrade, TFTP and U-Boot recovery).
+- Automated ImageBuilder generator (`scripts/build-firmware.sh`).
 
 ---
 
-## Architecture & Technology Stack
+## Architecture
 
 ```
 ORBIX Web UI (React 19 + TypeScript + Vite 8 + Tailwind CSS + shadcn/ui zinc)
    │
    ├── JSON-RPC / ubus HTTP API Gateway
-   │      ├── file (native /tmp/dhcp.leases and /proc/net/arp fallback)
-   │      ├── network.wireless & iwinfo (native radio configuration & scanning)
-   │      ├── uci (get, set, commit, apply)
-   │      ├── system / rc / service (telemetry, daemons, procd)
-   │      └── circumvention (hardened ORBIX RPC backend: awg, zapret, pbr, zero-lockout watchdog)
+   │      ├── file (native /tmp/dhcp.leases and /proc/net/arp reading without LuCI)
+   │      ├── network.wireless & iwinfo (radio status and Wi-Fi scanning)
+   │      ├── uci (atomic get, set, commit, apply)
+   │      ├── system / rc / service (telemetry, services, procd)
+   │      └── circumvention (secure custom backend: awg, zapret, pbr, watchdog)
    │
-   ├── Policy Routing & Security Engine
-   │      ├── Linux Kernel 6.6 / 6.12 Routing Tables & IP Rules
-   │      ├── nftables / fw4 Table Sets
-   │      ├── Zapret2 (nfqws / tpws DPI desync engine)
-   │      └── Sing-box / AmneziaWG Tunnels
+   ├── Routing & Security Engine
+   │      ├── Linux Kernel 6.6 / 6.12 (iproute2 tables, ip rules)
+   │      ├── nftables / fw4 (nft sets, policy chains, mark routing)
+   │      ├── Zapret2 (nfqws packet desynchronization)
+   │      └── Sing-box Reality / AmneziaWG tunnels
    │
-   └── OpenWrt Base System (MediaTek Filogic / x86_64 / ARM / MIPS)
+   └── Native OpenWrt System (MediaTek Filogic / x86_64 / ARM / MIPS)
 ```
 
 ---
 
-## Documentation Suite
+## Project Documentation
 
-Complete technical documentation is available in the [`docs/`](docs/) directory:
+Detailed engineering documentation is located in the [`docs/`](docs/) directory:
 
-- [Project Audit Matrix](docs/PROJECT_AUDIT.md) — 29-module production readiness audit.
-- [Security Vulnerability Audit](docs/SECURITY_AUDIT.md) — Audit of shell execution, RPC ACL, and rollback mechanics.
-- [Security Architecture & Threat Model](docs/SECURITY.md) — Zero-lockout guarantees, least-privilege RPC, and safe updates.
-- [Platform Architecture Specification](docs/ARCHITECTURE.md) — HAL, policy compiler, and LuCI decoupling.
-- [Universal Installation & Update Guide](docs/INSTALLATION.md) — CLI installer, offline bundle, recovery flags.
-- [Hardware Compatibility Matrix](docs/COMPATIBILITY.md) — Verified SoCs, Wi-Fi 6/7 radios, RAM requirements.
-- [Configuration Specification](docs/CONFIGURATION.md) — `orbix-config` JSON specification and AES-GCM encryption.
-- [API Reference](docs/API.md) — Complete Ubus JSON-RPC API specification.
-- [Developer Guide](docs/DEVELOPMENT.md) — Local development, mocking, vitest suite, conventions.
-- [Future Roadmap](docs/ROADMAP.md) — Multi-WAN failover, mwan3, fleet cloud controller.
+- [Project Audit Matrix](docs/PROJECT_AUDIT.md) — Comprehensive technical audit of all platform modules.
+- [Security Audit](docs/SECURITY_AUDIT.md) — RPC ACL verification, shell injection audit, and safe execution paths.
+- [Security Architecture](docs/SECURITY.md) — Threat model, Zero-Lockout design, and RPC privilege isolation.
+- [Architecture Specification](docs/ARCHITECTURE.md) — Hardware Abstraction Layer (HAL), policy compiler, and LuCI-free operation.
+- [Installation & Upgrade Guide](docs/INSTALLATION.md) — Universal install script, offline bundle deployment, and rollback.
+- [Hardware Compatibility Matrix](docs/COMPATIBILITY.md) — Tested SoCs, Wi-Fi 6/7 radios, and resource guidelines.
+- [Configuration Specification](docs/CONFIGURATION.md) — JSON schema `orbix-config` and AES-GCM backup format.
+- [API Reference](docs/API.md) — Comprehensive Ubus JSON-RPC endpoint reference.
+- [Developer Guide](docs/DEVELOPMENT.md) — Local development, running Vitest tests, and code style.
+- [Roadmap](docs/ROADMAP.md) — Multi-WAN, mwan3 policy engine, and cloud controller.
 
 ---
 
-## Testing & Quality Assurance
+## Testing & Verification
 
-ORBIX includes a comprehensive unit and integration test suite:
+ORBIX contains a comprehensive automated test suite for its core engine logic:
 
 ```sh
 npm test
 ```
 
 ```
-✓ tests/hal.test.ts (3 tests)
 ✓ tests/security-validation.test.ts (4 tests)
-✓ tests/policy-engine.test.ts (5 tests)
+✓ tests/hal.test.ts (3 tests)
 ✓ tests/config-management.test.ts (5 tests)
+✓ tests/policy-engine.test.ts (5 tests)
+✓ tests/error-system.test.ts (7 tests)
 
-Test Files  4 passed (4)
-Tests       17 passed (17)
+Test Files  5 passed (5)
+Tests       24 passed (24)
 ```
 
 ---

@@ -1,4 +1,4 @@
-# ORBIX • Платформа управления сетью для OpenWrt
+# ORBIX
 
 [![OpenWrt Version](https://img.shields.io/badge/OpenWrt-25.12%20%2F%2024.10%20%2F%2023.05-blue.svg)](https://openwrt.org)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev)
@@ -10,7 +10,7 @@
 
 [**Read in English (README.md)**](README.md)
 
-Высокопроизводительный современный веб-интерфейс и комплексная сетевая платформа для роутеров под управлением **OpenWrt**, спроектированная в строгой монохромной инженерной эстетике **shadcn/ui zinc**.
+Универсальная сетевая платформа для роутеров под управлением **OpenWrt**, спроектированная в строгой инженерной эстетике **shadcn/ui zinc**.
 
 **ORBIX** превращает OpenWrt в интуитивную, визуальную и надежную систему управления сетью как для обычных пользователей, так и для сетевых инженеров. Работает напрямую с нативными подсистемами OpenWrt — **ubus**, **UCI** и **sysfs** — **без моков, заглушек и сторонних тяжелых зависимостей**.
 
@@ -38,19 +38,19 @@ sh -c "$(wget -qO- https://raw.githubusercontent.com/cyberhard/orbix/main/script
 
 ### 1. Интерактивная топология сети (стиль Cisco Packet Tracer)
 Визуальная карта инфраструктуры в реальном времени. Перетаскивание узлов с мгновенным перерасчетом кабельных трасс, индикаторами портов и подробным инспектором устройств.
-![Топология сети ORBIX](docs/images/topology-macos.png)
+![Топология сети ORBIX](docs/images/topology-ru-macos.png)
 
 ### 2. Главная панель и телеметрия в реальном времени
-Сводка состояния роутера: нагрузка CPU, ОЗУ, Flash, число активных DHCP-аренд с правильной русской плюрализацией (`6 устройств`), статус WAN и плавный векторный график скорости.
-![Обзор системы ORBIX](docs/images/overview-macos.png)
+Сводка состояния роутера: нагрузка CPU, ОЗУ, Flash, число активных DHCP-аренд с правильной русской плюрализацией (`6 устройств`), статус WAN, виджет защиты Kill Switch / Leak Guard и плавный векторный график скорости.
+![Обзор системы ORBIX](docs/images/overview-ru-macos.png)
 
 ### 3. Единый движок маршрутизации и политик (PBR)
 Два режима работы: **Простой режим** для ответов на базовые вопросы («куда направить YouTube или ТВ») и **Экспертный режим** для тонкой настройки таблиц маршрутизации, меток fwmark и сетов `nftables`.
-![Движок политик ORBIX](docs/images/policies-macos.png)
+![Движок политик ORBIX](docs/images/policies-ru-macos.png)
 
 ### 4. Каталог оборудования и портал прошивок
 Готовые официальные сборки OpenWrt с предустановленным ORBIX, контрольные суммы SHA-256 и пошаговые инструкции по прошивке (Factory, Sysupgrade, восстановление TFTP).
-![Каталог оборудования ORBIX](docs/images/catalog-macos.png)
+![Каталог оборудования ORBIX](docs/images/catalog-ru-macos.png)
 
 ---
 
@@ -121,7 +121,7 @@ ORBIX Web UI (React 19 + TypeScript + Vite 8 + Tailwind CSS + shadcn/ui zinc)
 
 Подробная инженерная документация расположена в каталоге [`docs/`](docs/):
 
-- [Матрица аудита проекта](docs/PROJECT_AUDIT.md) — Технический аудит всех 29 модулей платформы.
+- [Матрица аудита проекта](docs/PROJECT_AUDIT.md) — Технический аудит всех модулей платформы.
 - [Аудит безопасности](docs/SECURITY_AUDIT.md) — Анализ RPC ACL, шелл-инъекций и защитных механизмов.
 - [Архитектура безопасности](docs/SECURITY.md) — Модель угроз, защита от потери доступа (Zero-Lockout) и привилегии RPC.
 - [Архитектурная спецификация](docs/ARCHITECTURE.md) — Слой абстракции оборудования (HAL), компилятор политик и независимость от LuCI.
@@ -143,13 +143,14 @@ npm test
 ```
 
 ```
-✓ tests/hal.test.ts (3 tests)
 ✓ tests/security-validation.test.ts (4 tests)
-✓ tests/policy-engine.test.ts (5 tests)
+✓ tests/hal.test.ts (3 tests)
 ✓ tests/config-management.test.ts (5 tests)
+✓ tests/policy-engine.test.ts (5 tests)
+✓ tests/error-system.test.ts (7 tests)
 
-Test Files  4 passed (4)
-Tests       17 passed (17)
+Test Files  5 passed (5)
+Tests       24 passed (24)
 ```
 
 ---

@@ -889,7 +889,7 @@ export const ERROR_REGISTRY: Record<number, ErrorDefinition> = {
       ],
       ru: [
         "Проверьте правильность вводимых учетных данных",
-        "Убедитесь, что доступ к админке из внешнего WAN отключен",
+        "Убедитесь, что доступ к панели управления из внешнего WAN отключен",
       ],
     },
     httpRedirectApplicable: false,
