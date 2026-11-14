@@ -71,7 +71,11 @@ export const TrafficFlow: React.FC = () => {
 
   const activeDpi = isYoutube ? "hostfakesplit (Google CDN)" : isDiscord ? "multisplit (Discord)" : null;
   const activeOutbound = isRestricted ? "singbox" : isAi ? "dns-ai / singbox" : "wan";
-  const activeDns = isAi ? "dns-ai.ru (DoH Smart DNS)" : isRuNet ? "77.88.8.8 (RuNet DNS)" : "1.1.1.1 (Secure DoH)";
+  const activeDns = isAi
+    ? "dns-ai.ru (Smart DNS)"
+    : isRuNet
+    ? "77.88.8.8 (Яндекс.DNS)"
+    : "Google DoH / DoT (dns.google)";
 
   return (
     <div className="space-y-6">

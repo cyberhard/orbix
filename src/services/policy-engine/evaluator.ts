@@ -168,14 +168,20 @@ export class RouteEvaluator {
     let dpiApplied = false;
     let dpiStrategy = "none";
     let expectedRoute = "Direct WAN";
-    let resolver = "77.88.8.8 (Local ISP / Yandex DNS)";
-    let dohUsed = false;
+    let resolver = isRuTarget
+      ? "Яндекс.DNS (77.88.8.8 / 77.88.8.1)"
+      : "Google DoH / DoT (dns.google: 8.8.8.8)";
+    let dohUsed = !isRuTarget;
 
     if (winner) {
       switch (winner.action.type) {
         case "direct_wan":
           selectedOutbound = "wan (Прямой интернет)";
           expectedRoute = "Прямое подключение к провайдеру без VPN";
+          if (!isRuTarget) {
+            resolver = "Google DoH / DoT (dns.google: 8.8.8.8)";
+            dohUsed = true;
+          }
           break;
 
         case "zapret_dpi":
@@ -183,13 +189,15 @@ export class RouteEvaluator {
           dpiApplied = true;
           dpiStrategy = isYoutubeTarget ? "hostfakesplit (Google CDN)" : "multisplit (Discord / TLS)";
           expectedRoute = `Прямой WAN с обходом ТСПУ через Zapret (${dpiStrategy})`;
+          resolver = "Google DoH / DoT (dns.google: 8.8.8.8)";
+          dohUsed = true;
           break;
 
         case "vpn_tunnel":
         case "vpn_group":
           selectedOutbound = winner.action.target || "singbox (VLESS Reality)";
           expectedRoute = `Зашифрованный туннель Sing-box VLESS Reality (${selectedOutbound})`;
-          resolver = "1.1.1.1 (Cloudflare DoH / Tunnel DNS)";
+          resolver = "Google DoH (https://dns.google/dns-query) / DoT";
           dohUsed = true;
           break;
 
@@ -208,6 +216,9 @@ export class RouteEvaluator {
     if (isAiTarget) {
       resolver = "dns-ai.ru (Smart DNS reverse proxy)";
       dohUsed = true;
+    } else if (isRuTarget) {
+      resolver = "Яндекс.DNS (77.88.8.8 / 77.88.8.1)";
+      dohUsed = false;
     }
 
     const troubleshooting: RouteEvaluationResult["troubleshooting"] = [];

@@ -192,6 +192,14 @@ export class PolicyCompiler {
     compiled.zapretHostlists.general = Array.from(zapretGeneralSet);
     compiled.zapretHostlists.exclude = Array.from(zapretExcludeSet);
 
+    // Split DNS configuration: Russian domains to Yandex (77.88.8.8), rest to Google DoH/DoT (127.0.0.1#5353)
+    const ruCategory = this.categories.get("russia");
+    const ruDomains = ruCategory ? ruCategory.domains : [".ru", ".su", ".xn--p1ai", "yandex.ru", "gosuslugi.ru", "sberbank.ru"];
+    compiled.dnsmasqEntries = [
+      "server=127.0.0.1#5353", // Secure Google DoH (https://dns.google/dns-query) & DoT (tls://dns.google:853)
+      ...ruDomains.slice(0, 35).map((d) => `server=/${d.startsWith(".") ? d.slice(1) : d}/77.88.8.8`),
+    ];
+
     return compiled;
   }
 }
