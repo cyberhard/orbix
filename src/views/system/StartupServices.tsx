@@ -29,7 +29,7 @@ const SERVICE_DESCRIPTIONS: Record<string, string> = {
   "sysntpd": "Network Time Protocol daemon for clock sync",
   "log": "System kernel and userspace log buffer (logd)",
   "wpad": "Hostapd wireless authenticator for 2.4GHz & 5GHz APs",
-  "rpcd": "Ubus RPC daemon powering Modern Admin UI",
+  "rpcd": "Ubus RPC daemon powering ORBIX UI",
 };
 
 export const StartupServices: React.FC = () => {

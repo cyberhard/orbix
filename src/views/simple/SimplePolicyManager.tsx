@@ -1,5 +1,7 @@
 // Simple Mode Intent-Based Network Policy Manager
 import React, { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { ubusClient } from "@/lib/ubus-client";
 import { usePolicyStore } from "@/store/policy-store";
 import { useSubscriptionStore } from "@/store/subscription-store";
 import { useI18nStore } from "@/store/i18n-store";
@@ -29,6 +31,23 @@ export const SimplePolicyManager: React.FC = () => {
   const isRu = language === "ru";
   const { policies, updatePolicy, applyPoliciesToRouter, isApplying } = usePolicyStore();
   const { killSwitch, toggleKillSwitch } = useSubscriptionStore();
+
+  const { data: vless } = useQuery({
+    queryKey: ["vless-status"],
+    queryFn: () => ubusClient.getVlessStatus(),
+    refetchInterval: 5000,
+  });
+
+  const activeVlessNode = vless?.activeNode;
+  const { data: vlessLatency } = useQuery({
+    queryKey: ["vless-latency", activeVlessNode?.server, activeVlessNode?.port],
+    queryFn: () => {
+      if (!activeVlessNode?.server) return null;
+      return ubusClient.testNodeLatency(activeVlessNode.server, activeVlessNode.port || 8443);
+    },
+    enabled: Boolean(vless?.running && activeVlessNode?.server),
+    refetchInterval: 10000,
+  });
 
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -244,14 +263,16 @@ export const SimplePolicyManager: React.FC = () => {
           <CardContent className="pt-3 text-xs text-zinc-400 space-y-2">
             <p className="text-[11px]">
               {isRu
-                ? "Открывает доступ к ChatGPT, OpenAI и Claude. Поддерживает прозрачный обратный прокси через dns-ai.ru с задержкой 38 мс."
+                ? "Открывает доступ к ChatGPT, OpenAI и Claude. Поддерживает прозрачный обратный прокси через dns-ai.ru."
                 : "Unblocks ChatGPT and Claude. Leverages fast transparent reverse proxying or VLESS Reality tunnel."}
             </p>
             <div className="flex items-center gap-2 pt-1">
               <Badge variant="outline" className="text-[10px] font-mono text-emerald-400 bg-emerald-950/20 border-emerald-800/40">
-                Smart DNS / VLESS
+                Smart DNS / dns-ai.ru
               </Badge>
-              <span className="text-[10px] text-zinc-500 font-mono">38 ms latency</span>
+              <span className="text-[10px] text-zinc-500 font-mono">
+                {isRu ? "Активен" : "Active"}
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -283,14 +304,16 @@ export const SimplePolicyManager: React.FC = () => {
           <CardContent className="pt-3 text-xs text-zinc-400 space-y-2">
             <p className="text-[11px]">
               {isRu
-                ? "Сервисы ушедшие из РФ или заблокированные на уровне BGP провайдера направляются в зарубежный сервер подписки Liberty (Финляндия / Швейцария)."
-                : "BGP-dropped subnets and geoblocked sites routed through Liberty Reality outbound (Finland / Switzerland)."}
+                ? `Сервисы ушедшие из РФ или заблокированные на уровне BGP направляются через активный узел VLESS ${activeVlessNode?.name ? `(${activeVlessNode.name})` : ""}.`
+                : `BGP-dropped subnets and geoblocked sites routed through active VLESS outbound ${activeVlessNode?.name ? `(${activeVlessNode.name})` : ""}.`}
             </p>
             <div className="flex items-center gap-2 pt-1">
               <Badge variant="outline" className="text-[10px] font-mono text-purple-400 bg-purple-950/20 border-purple-800/40">
                 VLESS XTLS Reality
               </Badge>
-              <span className="text-[10px] text-zinc-500 font-mono">48 ms RTT</span>
+              <span className="text-[10px] text-zinc-500 font-mono">
+                {vlessLatency?.latency ? `${vlessLatency.latency} ms RTT` : (vless?.running ? (isRu ? "Активен" : "Active") : (isRu ? "Отключен" : "Disabled"))}
+              </span>
             </div>
           </CardContent>
         </Card>

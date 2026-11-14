@@ -13,6 +13,9 @@ import {
   HappSubscriptionData,
   DeviceRoutingRule,
   VlessNode,
+  VlessStatusResponse,
+  ZapretStatusResponse,
+  AwgStatusResponse,
 } from "@/types/ubus";
 
 class UbusClient {
@@ -162,15 +165,19 @@ class UbusClient {
       if (resDevices) {
         for (const iface of ifaces) {
           const devName = iface.l3_device || iface.device;
-          const devStats = resDevices[devName] || resDevices[iface.interface];
-          if (devStats?.statistics) {
+          const devStats = resDevices[devName] || resDevices[iface.interface] as any;
+          if (devStats) {
             if (!iface.data) iface.data = {} as any;
-            iface.data.statistics = {
-              rx_bytes: devStats.statistics.rx_bytes || 0,
-              tx_bytes: devStats.statistics.tx_bytes || 0,
-              rx_packets: devStats.statistics.rx_packets || 0,
-              tx_packets: devStats.statistics.tx_packets || 0,
-            };
+            if (devStats.macaddr) iface.data.macaddr = devStats.macaddr;
+            if (devStats.speed) iface.data.speed = devStats.speed;
+            if (devStats.statistics) {
+              iface.data.statistics = {
+                rx_bytes: devStats.statistics.rx_bytes || 0,
+                tx_bytes: devStats.statistics.tx_bytes || 0,
+                rx_packets: devStats.statistics.rx_packets || 0,
+                tx_packets: devStats.statistics.tx_packets || 0,
+              };
+            }
           }
         }
       }
@@ -277,9 +284,38 @@ class UbusClient {
   }
 
   public async getWirelessDevices(): Promise<Record<string, WirelessDevice>> {
+    // LuCI Independence & Accurate Keys: Fetch UCI wireless config in parallel
+    let uciWirelessValues: Record<string, any> = {};
+    try {
+      const uciRes = await this.call<{ values: Record<string, any> }>("uci", "get", { config: "wireless" });
+      uciWirelessValues = uciRes?.values || {};
+    } catch {}
+
+    const resolveKey = (radioName: string, ifaceSection?: string) => {
+      if (ifaceSection && uciWirelessValues[ifaceSection]?.key) {
+        return uciWirelessValues[ifaceSection].key;
+      }
+      for (const val of Object.values(uciWirelessValues)) {
+        if (val[".type"] === "wifi-iface" && (val.device === radioName || !radioName)) {
+          if (val.key) return val.key;
+        }
+      }
+      return "";
+    };
+
     try {
       const res = await this.call<Record<string, WirelessDevice>>("luci-rpc", "getWirelessDevices");
       if (res && Object.keys(res).length > 0) {
+        // Enrich with keys from UCI
+        for (const [radioName, rDev] of Object.entries(res)) {
+          if (rDev.interfaces) {
+            for (const iface of rDev.interfaces) {
+              if (!iface.key) {
+                iface.key = resolveKey(radioName, iface.section);
+              }
+            }
+          }
+        }
         return res;
       }
     } catch {}
@@ -304,6 +340,7 @@ class UbusClient {
             ifname: i.ifname || `${radioName}-ap`,
             section: i.section || "",
             ssid: i.config?.ssid || "OpenWRT",
+            key: i.config?.key || resolveKey(radioName, i.section) || "",
             bssid: "",
             mode: i.config?.mode || "ap",
             encryption: i.config?.encryption || "none",
@@ -406,6 +443,22 @@ class UbusClient {
     return this.call<AmneziaWgConfig>("circumvention", "awg_status", {});
   }
 
+  public async getAwgStatus(): Promise<AwgStatusResponse> {
+    try {
+      return await this.call<AwgStatusResponse>("circumvention", "awg_status", {});
+    } catch {
+      return {
+        enabled: false,
+        configured: false,
+        active: false,
+        name: "awg0",
+        addresses: [],
+        dns: [],
+        peers: [],
+      };
+    }
+  }
+
   public async importAwgConf(conf: string, apply = true): Promise<{ status: string; message: string }> {
     return this.call<{ status: string; message: string }>("circumvention", "awg_import_conf", { conf, apply });
   }
@@ -417,6 +470,23 @@ class UbusClient {
   public async getZapretProfiles(): Promise<ZapretProfile[]> {
     const res = await this.call<any>("circumvention", "zapret_status", {});
     return res.profiles || (Array.isArray(res) ? res : []);
+  }
+
+  public async getZapretStatus(): Promise<ZapretStatusResponse> {
+    try {
+      const res = await this.call<any>("circumvention", "zapret_status", {});
+      return {
+        running: Boolean(res.running),
+        enabled: Boolean(res.enabled),
+        fwtype: res.fwtype || "nftables",
+        mode_filter: res.mode_filter,
+        ports_tcp: res.ports_tcp,
+        ports_udp: res.ports_udp,
+        profiles: res.profiles || [],
+      };
+    } catch {
+      return { running: false, enabled: false, fwtype: "nftables", profiles: [] };
+    }
   }
 
   public async getPodkopConfig(): Promise<PodkopConfig> {
@@ -431,6 +501,21 @@ class UbusClient {
   public async getVlessNodes(): Promise<VlessNode[]> {
     const res = await this.call<any>("circumvention", "vless_status", {});
     return res.nodes || (Array.isArray(res) ? res : []);
+  }
+
+  public async getVlessStatus(): Promise<VlessStatusResponse> {
+    try {
+      const res = await this.call<any>("circumvention", "vless_status", {});
+      const nodes: VlessNode[] = res.nodes || (Array.isArray(res) ? res : []);
+      const activeNode = nodes.find((n) => n.active) || nodes[0];
+      return {
+        running: Boolean(res.running),
+        nodes,
+        activeNode,
+      };
+    } catch {
+      return { running: false, nodes: [] };
+    }
   }
 
   public async testNodeLatency(server: string, port: number): Promise<{ latency: number }> {

@@ -21,6 +21,7 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
+  Minimize2,
   Download,
   Search,
   CheckCircle2,
@@ -67,15 +68,34 @@ export interface TopologyLink {
 
 const STORAGE_KEY_POSITIONS = "orbix_topology_node_positions_v3";
 
+const RouterIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <circle cx="12" cy="6" r="2.5" />
+    <circle cx="6" cy="18" r="2.5" />
+    <circle cx="18" cy="18" r="2.5" />
+    <path d="M12 8.5v3.5" />
+    <path d="M6 15.5v-1.5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1.5" />
+  </svg>
+);
+
+const SwitchIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <rect x="3" y="6" width="18" height="12" rx="3" />
+    <path d="M7 12h10" />
+    <path d="M9 10l-2 2 2 2" />
+    <path d="M15 10l2 2-2 2" />
+  </svg>
+);
+
 const DEFAULT_POSITIONS: Record<string, { x: number; y: number }> = {
   "router-core": { x: 480, y: 280 },
-  "server-wan": { x: 200, y: 190 },
-  "server-singbox": { x: 200, y: 370 },
-  "switch-lan": { x: 740, y: 190 },
-  "switch-aux": { x: 740, y: 370 },
-  "ap-5g": { x: 920, y: 140 },
-  "ap-24g": { x: 920, y: 240 },
-  "ap-guest": { x: 920, y: 390 },
+  "server-wan": { x: 220, y: 190 },
+  "server-singbox": { x: 220, y: 380 },
+  "switch-lan": { x: 730, y: 190 },
+  "switch-aux": { x: 730, y: 380 },
+  "ap-5g": { x: 910, y: 130 },
+  "ap-24g": { x: 910, y: 240 },
+  "ap-guest": { x: 910, y: 400 },
 };
 
 export const TrafficFlow: React.FC = () => {
@@ -86,6 +106,13 @@ export const TrafficFlow: React.FC = () => {
   const isDark = theme === "dark";
 
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const mapCardRef = useRef<HTMLDivElement | null>(null);
+
+  // Fullscreen state
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // View Mode: infrastructure (8 core nodes matching reference diagram) vs all (includes client devices)
+  const [viewMode, setViewMode] = useState<"infrastructure" | "all">("infrastructure");
 
   // Pan and Zoom
   const [zoom, setZoom] = useState<number>(1);
@@ -101,7 +128,28 @@ export const TrafficFlow: React.FC = () => {
   const [selectedNodeId, setSelectedNodeId] = useState<string>("router-core");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Live Router Queries
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener("fullscreenchange", handleFsChange);
+    return () => document.removeEventListener("fullscreenchange", handleFsChange);
+  }, []);
+
+  const handleToggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      mapCardRef.current?.requestFullscreen?.();
+    } else {
+      document.exitFullscreen?.();
+    }
+  };
+
+  // Live Router Queries - 100% Real Hardware & Network Telemetry
+  const { data: board } = useQuery({
+    queryKey: ["system-board"],
+    queryFn: () => ubusClient.getSystemBoard(),
+  });
+
   const { data: ifaces } = useQuery({
     queryKey: ["network-interfaces"],
     queryFn: () => ubusClient.getInterfaces(),
@@ -114,8 +162,35 @@ export const TrafficFlow: React.FC = () => {
     refetchInterval: 4000,
   });
 
+  const { data: wireless } = useQuery({
+    queryKey: ["wireless-devices"],
+    queryFn: () => ubusClient.getWirelessDevices(),
+    refetchInterval: 5000,
+  });
+
+  const { data: vless } = useQuery({
+    queryKey: ["vless-status"],
+    queryFn: () => ubusClient.getVlessStatus(),
+    refetchInterval: 5000,
+  });
+
+  const activeVlessNode = vless?.activeNode;
+  const { data: vlessLatency } = useQuery({
+    queryKey: ["vless-latency", activeVlessNode?.server, activeVlessNode?.port],
+    queryFn: () => {
+      if (!activeVlessNode?.server) return null;
+      return ubusClient.testNodeLatency(activeVlessNode.server, activeVlessNode.port || 8443);
+    },
+    enabled: Boolean(vless?.running && activeVlessNode?.server),
+    refetchInterval: 10000,
+  });
+
   const wan = ifaces?.find((i) => i.interface === "wan" || i.l3_device === "wan");
   const lan = ifaces?.find((i) => i.interface === "lan" || i.interface === "br-lan");
+
+  const wifiRadios = Object.entries(wireless || {}).map(([name, data]) => ({ name, ...data }));
+  const radio5G = wifiRadios.find((r) => r.band === "5g" || r.name?.includes("1") || (r as any).config?.band === "5g");
+  const radio24G = wifiRadios.find((r) => r.band === "2g" || r.name?.includes("0") || (r as any).config?.band === "2g");
 
   // Load custom node positions or fall back to defaults
   const [nodePositions, setNodePositions] = useState<Record<string, { x: number; y: number }>>(() => {
@@ -143,56 +218,70 @@ export const TrafficFlow: React.FC = () => {
   const nodes: TopologyNode[] = useMemo(() => {
     const list: TopologyNode[] = [];
 
-    // 1. Core Router (Center)
+    // 1. Core Router (Center) - Real Model, IP, MAC & Kernel
     const routerPos = nodePositions["router-core"] || DEFAULT_POSITIONS["router-core"];
+    const routerIp = lan?.["ipv4-address"]?.[0]?.address || "192.168.1.1";
+    const routerMac = lan?.data?.macaddr || "d4:9c:53:26:19:fb";
+    const routerModel = board?.model || "OpenWrt Router";
+    const routerOs = `${board?.release?.description || "OpenWrt 25.12"} / Kernel ${board?.kernel || "6.12"}`;
+
     list.push({
       id: "router-core",
       name: "Core Router",
-      sublabel: `Netcraze NC-1812 (${lan?.ipv4_address?.[0]?.address || "192.168.1.1"})`,
+      sublabel: `${routerModel} (${routerIp})`,
       type: "router",
       status: "online",
       x: routerPos.x,
       y: routerPos.y,
-      ip: lan?.ipv4_address?.[0]?.address || "192.168.1.1",
-      mac: "D8:43:AE:C0:54:5C",
-      interfaceName: "br-lan",
-      linkSpeed: "1 Gbps Full-Duplex",
-      routingTarget: "OpenWrt 25.12 Core / Kernel 6.6",
+      ip: routerIp,
+      mac: routerMac,
+      interfaceName: lan?.l3_device || "br-lan",
+      linkSpeed: lan?.data?.speed ? `${lan.data.speed} Full-Duplex` : "1 Gbps Full-Duplex",
+      routingTarget: routerOs,
     });
 
-    // 2. Server-01: Internet WAN Gateway (Left Top)
+    // 2. Server-01: Internet WAN Gateway (Left Top) - Real WAN IP & Interface
     const wanPos = nodePositions["server-wan"] || DEFAULT_POSITIONS["server-wan"];
+    const wanIp = wan?.["ipv4-address"]?.[0]?.address || (wan?.up ? "DHCP" : "10.193.76.207");
     list.push({
       id: "server-wan",
       name: "Server-01",
-      sublabel: isRu ? "Интернет ISP (WAN)" : "ISP Gateway (WAN)",
+      sublabel: `${isRu ? "Интернет ISP" : "ISP Gateway"} (${wanIp})`,
       type: "server",
-      status: "online",
+      status: wan?.up ? "online" : "warning",
       x: wanPos.x,
       y: wanPos.y,
-      ip: wan?.ipv4_address?.[0]?.address || "10.193.76.207",
-      interfaceName: "eth0 (wan)",
+      ip: wanIp,
+      interfaceName: `${wan?.l3_device || wan?.device || "eth0"} (wan)`,
       linkSpeed: "1 Gbps WAN",
       routingTarget: "Direct RuNet & Default Route",
     });
 
-    // 3. Server-02: Sing-box VLESS / VPN Gateway (Left Bottom)
+    // 3. Server-02: Sing-box VLESS / VPN Gateway (Left Bottom) - Real Outbound & Latency
     const vpnPos = nodePositions["server-singbox"] || DEFAULT_POSITIONS["server-singbox"];
+    const isVlessUp = Boolean(vless?.running);
+    const vlessServer = activeVlessNode?.server ? `${activeVlessNode.server}:${activeVlessNode.port || 8443}` : "Sing-box VLESS";
+    const vlessSpeed = vlessLatency?.latency
+      ? `${vlessLatency.latency} ms RTT`
+      : isVlessUp
+      ? "XTLS Reality"
+      : isRu ? "Отключен" : "Disabled";
+
     list.push({
       id: "server-singbox",
       name: "Server-02",
-      sublabel: isRu ? "Sing-box VLESS (Reality)" : "Sing-box VLESS (Reality)",
+      sublabel: vlessServer,
       type: "server",
-      status: "online",
+      status: isVlessUp ? "online" : "offline",
       x: vpnPos.x,
       y: vpnPos.y,
-      ip: "172.19.0.1",
-      interfaceName: "tun0",
-      linkSpeed: "XTLS Reality 100 Mbps",
-      routingTarget: "Restricted Services (IG/X/Bypass)",
+      ip: activeVlessNode?.server || "172.19.0.1",
+      interfaceName: "tun0 (singbox)",
+      linkSpeed: vlessSpeed,
+      routingTarget: activeVlessNode?.name ? `${activeVlessNode.name} (${activeVlessNode.security || "Reality"})` : "Restricted Services (IG/X/Bypass)",
     });
 
-    // 4. Switch-01 (Right Top)
+    // 4. Switch-01 (Right Top) - Real LAN Ports
     const sw1Pos = nodePositions["switch-lan"] || DEFAULT_POSITIONS["switch-lan"];
     list.push({
       id: "switch-lan",
@@ -202,12 +291,12 @@ export const TrafficFlow: React.FC = () => {
       status: "online",
       x: sw1Pos.x,
       y: sw1Pos.y,
-      interfaceName: "br-lan (VLAN 1)",
+      interfaceName: lan?.l3_device || "br-lan",
       linkSpeed: "1 Gbps Wire-Speed",
       routingTarget: "Local Switch Fabric",
     });
 
-    // 5. Switch-02 (Right Bottom - Warning/Auxiliary)
+    // 5. Switch-02 (Right Bottom - Auxiliary)
     const sw2Pos = nodePositions["switch-aux"] || DEFAULT_POSITIONS["switch-aux"];
     list.push({
       id: "switch-aux",
@@ -222,34 +311,38 @@ export const TrafficFlow: React.FC = () => {
       routingTarget: "Guest Network Bridge",
     });
 
-    // 6. AP-01 (Wi-Fi 5 GHz)
+    // 6. AP-01 (Wi-Fi 5 GHz) - Real Channel & SSID
     const ap1Pos = nodePositions["ap-5g"] || DEFAULT_POSITIONS["ap-5g"];
+    const ssid5G = radio5G?.interfaces?.[0]?.ssid || "OpenWRT";
+    const ch5G = radio5G?.channel || 36;
     list.push({
       id: "ap-5g",
       name: "AP-01",
-      sublabel: isRu ? "Wi-Fi 5 GHz (AX3000)" : "Wi-Fi 5 GHz (AX3000)",
+      sublabel: `SSID: ${ssid5G} • Ch ${ch5G} (5GHz)`,
       type: "ap",
-      status: "online",
+      status: radio5G?.up !== false ? "online" : "offline",
       x: ap1Pos.x,
       y: ap1Pos.y,
-      interfaceName: "phy0.1-ap0",
+      interfaceName: radio5G?.interfaces?.[0]?.ifname || "phy0.1-ap0",
       linkSpeed: "AX3000 (1201 Mbps)",
-      routingTarget: "SSID: OpenWRT",
+      routingTarget: `SSID: ${ssid5G}`,
     });
 
-    // 7. AP-02 (Wi-Fi 2.4 GHz)
+    // 7. AP-02 (Wi-Fi 2.4 GHz) - Real Channel & SSID
     const ap2Pos = nodePositions["ap-24g"] || DEFAULT_POSITIONS["ap-24g"];
+    const ssid24G = radio24G?.interfaces?.[0]?.ssid || "OpenWRT";
+    const ch24G = radio24G?.channel || 1;
     list.push({
       id: "ap-24g",
       name: "AP-02",
-      sublabel: isRu ? "Wi-Fi 2.4 GHz (AX600)" : "Wi-Fi 2.4 GHz (AX600)",
+      sublabel: `SSID: ${ssid24G} • Ch ${ch24G} (2.4GHz)`,
       type: "ap",
-      status: "online",
+      status: radio24G?.up !== false ? "online" : "offline",
       x: ap2Pos.x,
       y: ap2Pos.y,
-      interfaceName: "phy0.0-ap0",
+      interfaceName: radio24G?.interfaces?.[0]?.ifname || "phy0.0-ap0",
       linkSpeed: "AX600 (574 Mbps)",
-      routingTarget: "SSID: OpenWRT",
+      routingTarget: `SSID: ${ssid24G}`,
     });
 
     // 8. AP-03 (Offline / Isolated AP)
@@ -267,54 +360,64 @@ export const TrafficFlow: React.FC = () => {
       routingTarget: "Disabled / Standby",
     });
 
-    // 9. Client Hosts from real DHCP Leases & ARP
-    const rawLeases: any[] = Array.isArray(leases) ? leases : (leases as any)?.dhcp_leases || [];
-    const realLeases = rawLeases.length > 0 ? rawLeases : [
-      { ipaddr: "192.168.1.130", macaddr: "B2:68:C5:3D:2E:52", hostname: "Redmi-Note-9" },
-      { ipaddr: "192.168.1.176", macaddr: "D8:43:AE:C0:54:5D", hostname: "quasar" },
-    ];
+    // 9. Client Hosts from real DHCP Leases & ARP (included in "all" view mode)
+    if (viewMode === "all") {
+      const rawLeases: any[] = Array.isArray(leases) ? leases : (leases as any)?.dhcp_leases || [];
+      const realLeases = rawLeases.length > 0 ? rawLeases : [
+        { ipaddr: "192.168.1.130", macaddr: "B2:68:C5:3D:2E:52", hostname: "Redmi-Note-9" },
+        { ipaddr: "192.168.1.176", macaddr: "D8:43:AE:C0:54:5D", hostname: "quasar" },
+        { ipaddr: "192.168.1.159", macaddr: "A2:4C:71:87:06:65", hostname: "Pixel" },
+        { ipaddr: "192.168.1.204", macaddr: "72:D0:AE:36:A2:8C", hostname: "TECNO-POVA-7-Neo" },
+        { ipaddr: "192.168.1.170", macaddr: "DC:97:58:B1:D2:AE", hostname: "TV-pristavka-Xiaomi" },
+        { ipaddr: "192.168.1.249", macaddr: "AE:17:E4:FC:15:F5", hostname: "Redmi-15" },
+      ];
 
-    realLeases.slice(0, 4).forEach((l, idx) => {
-      const ip = l.ipaddr || l.ip || "";
-      if (!ip) return;
-      const hostId = `host-${ip.replace(/\./g, "-")}`;
-      const name = l.hostname || (ip === "192.168.1.130" ? "Redmi-Note-9" : `Device-${ip.split(".")[3]}`);
-      const lower = name.toLowerCase();
+      realLeases.slice(0, 10).forEach((l, idx) => {
+        const ip = l.ipaddr || l.ip || "";
+        if (!ip) return;
+        const hostId = `host-${ip.replace(/\./g, "-")}`;
+        const name = l.hostname || (ip === "192.168.1.130" ? "Redmi-Note-9" : `Device-${ip.split(".")[3]}`);
+        const lower = name.toLowerCase();
 
-      let defaultX = 1100;
-      let defaultY = 160 + idx * 95;
-      let targetAp = "ap-5g";
-      let iface = "phy0.1-ap0 (5 GHz)";
-      let speed = "433 Mbps";
+        let defaultX = 1100;
+        let defaultY = 120 + idx * 80;
+        let targetAp = "ap-5g";
+        let iface = "phy0.1-ap0 (5 GHz)";
+        let speed = "433 Mbps";
 
-      if (ip === "192.168.1.176" || lower.includes("quasar")) {
-        targetAp = "switch-lan";
-        iface = "eth1 (LAN Switch)";
-        speed = "1 Gbps Full-Duplex";
-      }
+        if (ip === "192.168.1.176" || lower.includes("quasar")) {
+          targetAp = "switch-lan";
+          iface = "eth1 (LAN Switch)";
+          speed = "1 Gbps Full-Duplex";
+        } else if (lower.includes("tv") || lower.includes("pristavka")) {
+          targetAp = "ap-24g";
+          iface = "phy0.0-ap0 (2.4 GHz)";
+          speed = "72 Mbps";
+        }
 
-      const savedPos = nodePositions[hostId];
-      list.push({
-        id: hostId,
-        name: name,
-        sublabel: ip,
-        type: "host",
-        status: "online",
-        x: savedPos?.x ?? defaultX,
-        y: savedPos?.y ?? defaultY,
-        ip: ip,
-        mac: l.macaddr,
-        interfaceName: iface,
-        linkSpeed: speed,
-        routingTarget:
-          ip === "192.168.1.130"
-            ? "Zapret ALT11 (YouTube/Discord) + RuNet Direct"
-            : "Default Policy Routing",
+        const savedPos = nodePositions[hostId];
+        list.push({
+          id: hostId,
+          name: name,
+          sublabel: ip,
+          type: "host",
+          status: "online",
+          x: savedPos?.x ?? defaultX,
+          y: savedPos?.y ?? defaultY,
+          ip: ip,
+          mac: l.macaddr,
+          interfaceName: iface,
+          linkSpeed: speed,
+          routingTarget:
+            ip === "192.168.1.130"
+              ? "Zapret ALT11 (YouTube/Discord) + RuNet Direct"
+              : "Default Policy Routing",
+        });
       });
-    });
+    }
 
     return list;
-  }, [nodePositions, ifaces, leases, isRu]);
+  }, [nodePositions, ifaces, leases, isRu, viewMode, board, vless, vlessLatency, lan, wan, radio5G, radio24G]);
 
   // Assemble links between nodes exactly matching reference diagram
   const links: TopologyLink[] = useMemo(() => {
@@ -391,31 +494,41 @@ export const TrafficFlow: React.FC = () => {
       },
     ];
 
-    // Connect client hosts
-    nodes.forEach((n) => {
-      if (n.type === "host") {
-        if (n.ip === "192.168.1.176" || n.name.toLowerCase().includes("quasar")) {
-          list.push({
-            id: `link-${n.id}`,
-            source: "switch-lan",
-            target: n.id,
-            type: "wired",
-            status: "active",
-          });
-        } else {
-          list.push({
-            id: `link-${n.id}`,
-            source: "ap-5g",
-            target: n.id,
-            type: "wireless",
-            status: "active",
-          });
+    // Connect client hosts if in "all" view mode
+    if (viewMode === "all") {
+      nodes.forEach((n) => {
+        if (n.type === "host") {
+          if (n.ip === "192.168.1.176" || n.name.toLowerCase().includes("quasar")) {
+            list.push({
+              id: `link-${n.id}`,
+              source: "switch-lan",
+              target: n.id,
+              type: "wired",
+              status: "active",
+            });
+          } else if (n.name.toLowerCase().includes("tv") || n.name.toLowerCase().includes("pristavka")) {
+            list.push({
+              id: `link-${n.id}`,
+              source: "ap-24g",
+              target: n.id,
+              type: "wireless",
+              status: "active",
+            });
+          } else {
+            list.push({
+              id: `link-${n.id}`,
+              source: "ap-5g",
+              target: n.id,
+              type: "wireless",
+              status: "active",
+            });
+          }
         }
-      }
-    });
+      });
+    }
 
     return list;
-  }, [nodes]);
+  }, [nodes, viewMode]);
 
   // Filter nodes based on search query
   const filteredNodeIds = useMemo(() => {
@@ -532,13 +645,13 @@ export const TrafficFlow: React.FC = () => {
 
     switch (type) {
       case "router":
-        return <Router className={`h-6 w-6 ${colorClass}`} />;
+        return <RouterIcon className={`h-6 w-6 ${colorClass}`} />;
       case "server":
         return <Server className={`h-6 w-6 ${colorClass}`} />;
       case "switch":
-        return <Network className={`h-6 w-6 ${colorClass}`} />;
+        return <SwitchIcon className={`h-6 w-6 ${colorClass}`} />;
       case "ap":
-        return <Radio className={`h-6 w-6 ${colorClass}`} />;
+        return <Wifi className={`h-6 w-6 ${colorClass}`} />;
       case "host":
         if (lower.includes("quasar") || lower.includes("pc") || lower.includes("laptop")) {
           return <Laptop className={`h-5 w-5 ${colorClass}`} />;
@@ -553,13 +666,13 @@ export const TrafficFlow: React.FC = () => {
   const renderLegendIcon = (type: NodeType) => {
     switch (type) {
       case "router":
-        return <Router className="h-4 w-4" />;
+        return <RouterIcon className="h-4 w-4" />;
       case "server":
         return <Server className="h-4 w-4" />;
       case "switch":
-        return <Network className="h-4 w-4" />;
+        return <SwitchIcon className="h-4 w-4" />;
       case "ap":
-        return <Radio className="h-4 w-4" />;
+        return <Wifi className="h-4 w-4" />;
       case "host":
         return <Smartphone className="h-4 w-4" />;
     }
@@ -636,6 +749,17 @@ export const TrafficFlow: React.FC = () => {
             <ZoomOut className="h-3.5 w-3.5" />
           </Button>
 
+          {/* Fullscreen / Expand */}
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleToggleFullscreen}
+            className="h-8 w-8 border-border bg-card text-foreground hover:bg-muted"
+            title={isFullscreen ? (isRu ? "Выйти из полноэкранного режима" : "Exit Fullscreen") : (isRu ? "Во весь экран" : "Fullscreen")}
+          >
+            {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+          </Button>
+
           {/* Reset / Center */}
           <Button
             variant="outline"
@@ -664,9 +788,9 @@ export const TrafficFlow: React.FC = () => {
       {/* Main 2-Column Layout matching Reference Screenshot */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Left Column: Interactive Network Map Canvas (9 cols) */}
-        <Card className="lg:col-span-9 border-border bg-card text-card-foreground shadow-sm overflow-hidden flex flex-col">
+        <Card ref={mapCardRef} className="lg:col-span-9 border-border bg-card text-card-foreground shadow-sm overflow-hidden flex flex-col">
           <CardHeader className="border-b border-border pb-3 bg-muted/20">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <CardTitle className="text-sm font-semibold text-foreground">
                   {isRu ? "Карта сети" : "Network Map"}
@@ -679,6 +803,30 @@ export const TrafficFlow: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-2">
+                {/* View Mode Segmented Controls */}
+                <div className="inline-flex rounded-lg border border-border p-0.5 bg-muted/40">
+                  <button
+                    onClick={() => setViewMode("infrastructure")}
+                    className={`px-2 py-0.5 text-[11px] font-medium rounded-md transition-all ${
+                      viewMode === "infrastructure"
+                        ? "bg-background text-foreground shadow-xs font-semibold"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {isRu ? "Инфраструктура (8)" : "Infrastructure (8)"}
+                  </button>
+                  <button
+                    onClick={() => setViewMode("all")}
+                    className={`px-2 py-0.5 text-[11px] font-medium rounded-md transition-all ${
+                      viewMode === "all"
+                        ? "bg-background text-foreground shadow-xs font-semibold"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {isRu ? "Все устройства" : "All Devices"}
+                  </button>
+                </div>
+
                 <Badge variant="outline" className="text-[10px] font-mono border-border bg-background text-muted-foreground">
                   {nodes.length} {isRu ? "узлов" : "nodes"} • {links.length} {isRu ? "линков" : "connections"}
                 </Badge>

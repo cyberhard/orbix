@@ -314,3 +314,58 @@ export interface RollbackState {
   timeout: number;
   startedAt: number;
 }
+
+export interface VlessStatusResponse {
+  running: boolean;
+  nodes: VlessNode[];
+  activeNode?: VlessNode;
+}
+
+export interface ZapretStatusResponse {
+  running: boolean;
+  enabled: boolean;
+  fwtype: string;
+  mode_filter?: string;
+  ports_tcp?: string;
+  ports_udp?: string;
+  profiles: Array<{
+    id: string;
+    name: string;
+    enabled: boolean;
+    mode: string;
+    protocol: string;
+    ports: string;
+    methods: string[];
+    hostlist?: string[];
+    exclude_list?: string[];
+  }>;
+}
+
+export interface AwgStatusResponse {
+  enabled: boolean;
+  configured: boolean;
+  active: boolean;
+  name: string;
+  public_key?: string;
+  listen_port?: number;
+  mtu?: number;
+  addresses?: string[];
+  dns?: string[];
+  peers?: Array<{
+    endpoint?: string;
+    allowed_ips?: string;
+    latest_handshake?: number;
+    transfer_rx?: number;
+    transfer_tx?: number;
+  }>;
+  jc?: number;
+  jmin?: number;
+  jmax?: number;
+  s1?: number;
+  s2?: number;
+  h1?: number;
+  h2?: number;
+  h3?: number;
+  h4?: number;
+}
+

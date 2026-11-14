@@ -235,7 +235,7 @@ export const translations = {
       revertAll: "Revert All",
     },
     login: {
-      title: "OpenWrt Modern Admin",
+      title: "ORBIX",
       subtitle: "Enter router credentials to access system management",
       username: "Username",
       password: "Password",
@@ -480,7 +480,7 @@ export const translations = {
       revertAll: "Откатить все изменения",
     },
     login: {
-      title: "OpenWrt Современная Админка",
+      title: "ORBIX",
       subtitle: "Введите учетные данные роутера для входа в панель",
       username: "Имя пользователя",
       password: "Пароль",
