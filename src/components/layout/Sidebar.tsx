@@ -60,42 +60,41 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, onSelectRoute, i
         {
           title: lang === "ru" ? "Управление сетью" : "Network Control",
           items: [
-            { id: "overview", label: t.nav.overview, icon: <Activity className="h-4 w-4" /> },
+            { id: "overview", label: t.nav.overview, icon: <Activity className="h-4 w-4 text-zinc-400" /> },
             {
               id: "policies",
               label: lang === "ru" ? "Правила и маршруты" : "Routing Rules",
-              icon: <Sparkles className="h-4 w-4 text-amber-400" />,
+              icon: <Sparkles className="h-4 w-4 text-zinc-400" />,
               badge: "Smart",
-              highlight: true,
             },
             {
               id: "traffic",
               label: t.nav.trafficTopology,
-              icon: <Workflow className="h-4 w-4 text-cyan-400" />,
-              badge: "Flow",
+              icon: <Workflow className="h-4 w-4 text-zinc-400" />,
+              badge: "Map",
             },
             {
               id: "explain",
               label: t.nav.explainRoute,
-              icon: <HelpCircle className="h-4 w-4 text-indigo-400" />,
+              icon: <HelpCircle className="h-4 w-4 text-zinc-400" />,
             },
             {
               id: "vpn",
               label: lang === "ru" ? "VPN и Подписки" : "VPN & Services",
-              icon: <Shield className="h-4 w-4 text-emerald-400" />,
+              icon: <Shield className="h-4 w-4 text-zinc-400" />,
               badge: "Failover",
             },
-            { id: "clients", label: t.nav.connectedClients, icon: <Users className="h-4 w-4" /> },
-            { id: "wireless", label: t.nav.wirelessRadios, icon: <Radio className="h-4 w-4" /> },
+            { id: "clients", label: t.nav.connectedClients, icon: <Users className="h-4 w-4 text-zinc-400" /> },
+            { id: "wireless", label: t.nav.wirelessRadios, icon: <Radio className="h-4 w-4 text-zinc-400" /> },
           ],
         },
         {
           title: lang === "ru" ? "Диагностика и Система" : "Diagnostics & System",
           items: [
-            { id: "diagnostics", label: t.nav.diagnostics, icon: <Terminal className="h-4 w-4" /> },
-            { id: "bandwidth", label: t.nav.realtimeGraphs, icon: <LineChart className="h-4 w-4" /> },
-            { id: "general", label: t.nav.generalSettings, icon: <Cpu className="h-4 w-4" /> },
-            { id: "install", label: t.nav.installCatalog, icon: <Download className="h-4 w-4 text-emerald-400" />, badge: "Catalog" },
+            { id: "diagnostics", label: t.nav.diagnostics, icon: <Terminal className="h-4 w-4 text-zinc-400" /> },
+            { id: "bandwidth", label: t.nav.realtimeGraphs, icon: <LineChart className="h-4 w-4 text-zinc-400" /> },
+            { id: "general", label: t.nav.generalSettings, icon: <Cpu className="h-4 w-4 text-zinc-400" /> },
+            { id: "install", label: t.nav.installCatalog, icon: <Download className="h-4 w-4 text-zinc-400" />, badge: "Catalog" },
           ],
         },
       ]
@@ -103,23 +102,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, onSelectRoute, i
         {
           title: t.nav.statusMonitoring,
           items: [
-            { id: "overview", label: t.nav.overview, icon: <Activity className="h-4 w-4" /> },
+            { id: "overview", label: t.nav.overview, icon: <Activity className="h-4 w-4 text-zinc-400" /> },
             {
               id: "traffic",
               label: t.nav.trafficTopology,
-              icon: <Workflow className="h-4 w-4 text-cyan-400" />,
-              badge: "Flow",
-              highlight: true,
+              icon: <Workflow className="h-4 w-4 text-zinc-400" />,
+              badge: "Map",
             },
             {
               id: "explain",
               label: t.nav.explainRoute,
-              icon: <HelpCircle className="h-4 w-4 text-indigo-400" />,
+              icon: <HelpCircle className="h-4 w-4 text-zinc-400" />,
               badge: "Why?",
             },
-            { id: "bandwidth", label: t.nav.realtimeGraphs, icon: <LineChart className="h-4 w-4" /> },
-            { id: "clients", label: t.nav.connectedClients, icon: <Users className="h-4 w-4" /> },
-            { id: "logs", label: t.nav.systemLogs, icon: <Terminal className="h-4 w-4" /> },
+            { id: "bandwidth", label: t.nav.realtimeGraphs, icon: <LineChart className="h-4 w-4 text-zinc-400" /> },
+            { id: "clients", label: t.nav.connectedClients, icon: <Users className="h-4 w-4 text-zinc-400" /> },
+            { id: "logs", label: t.nav.systemLogs, icon: <Terminal className="h-4 w-4 text-zinc-400" /> },
           ],
         },
         {
@@ -128,54 +126,53 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, onSelectRoute, i
             {
               id: "policies",
               label: t.nav.unifiedPolicies,
-              icon: <SlidersHorizontal className="h-4 w-4 text-amber-400" />,
+              icon: <SlidersHorizontal className="h-4 w-4 text-zinc-400" />,
               badge: "Engine",
-              highlight: true,
             },
             {
               id: "lists",
               label: t.nav.categoryFeeds,
-              icon: <BookmarkCheck className="h-4 w-4 text-emerald-400" />,
+              icon: <BookmarkCheck className="h-4 w-4 text-zinc-400" />,
               badge: "Feeds",
             },
             {
               id: "dns",
               label: t.nav.dnsCenter,
-              icon: <Server className="h-4 w-4 text-blue-400" />,
+              icon: <Server className="h-4 w-4 text-zinc-400" />,
               badge: "Smart",
             },
-            { id: "pbr", label: t.nav.policyRouting, icon: <Network className="h-4 w-4" />, badge: "PBR" },
-            { id: "zapret", label: t.nav.zapretBuilder, icon: <Sliders className="h-4 w-4" /> },
-            { id: "podkop", label: t.nav.podkopServices, icon: <Layers className="h-4 w-4" /> },
+            { id: "pbr", label: t.nav.policyRouting, icon: <Network className="h-4 w-4 text-zinc-400" />, badge: "PBR" },
+            { id: "zapret", label: t.nav.zapretBuilder, icon: <Sliders className="h-4 w-4 text-zinc-400" /> },
+            { id: "podkop", label: t.nav.podkopServices, icon: <Layers className="h-4 w-4 text-zinc-400" /> },
           ],
         },
         {
           title: t.nav.circumventionVpn,
           items: [
-            { id: "vpn", label: t.nav.vpnManager, icon: <Shield className="h-4 w-4" />, badge: "Groups" },
-            { id: "subscriptions", label: t.nav.subscriptions, icon: <Globe className="h-4 w-4" />, badge: "Happ" },
+            { id: "vpn", label: t.nav.vpnManager, icon: <Shield className="h-4 w-4 text-zinc-400" />, badge: "Groups" },
+            { id: "subscriptions", label: t.nav.subscriptions, icon: <Globe className="h-4 w-4 text-zinc-400" />, badge: "Happ" },
           ],
         },
         {
           title: t.nav.network,
           items: [
-            { id: "interfaces", label: t.nav.interfacesVlans, icon: <Network className="h-4 w-4" /> },
-            { id: "wireless", label: t.nav.wirelessRadios, icon: <Radio className="h-4 w-4" /> },
-            { id: "dhcp", label: t.nav.dhcpDns, icon: <FileCode2 className="h-4 w-4" /> },
-            { id: "firewall", label: t.nav.firewall, icon: <Shield className="h-4 w-4" /> },
-            { id: "diagnostics", label: t.nav.diagnostics, icon: <Terminal className="h-4 w-4" /> },
+            { id: "interfaces", label: t.nav.interfacesVlans, icon: <Network className="h-4 w-4 text-zinc-400" /> },
+            { id: "wireless", label: t.nav.wirelessRadios, icon: <Radio className="h-4 w-4 text-zinc-400" /> },
+            { id: "dhcp", label: t.nav.dhcpDns, icon: <FileCode2 className="h-4 w-4 text-zinc-400" /> },
+            { id: "firewall", label: t.nav.firewall, icon: <Shield className="h-4 w-4 text-zinc-400" /> },
+            { id: "diagnostics", label: t.nav.diagnostics, icon: <Terminal className="h-4 w-4 text-zinc-400" /> },
           ],
         },
         {
           title: t.nav.system,
           items: [
-            { id: "general", label: t.nav.generalSettings, icon: <Cpu className="h-4 w-4" /> },
-            { id: "admin", label: t.nav.adminSsh, icon: <Key className="h-4 w-4" /> },
-            { id: "software", label: t.nav.softwarePackages, icon: <Package className="h-4 w-4" /> },
-            { id: "services", label: t.nav.startupServices, icon: <RotateCw className="h-4 w-4" /> },
-            { id: "tasks", label: t.nav.scheduledTasks, icon: <Calendar className="h-4 w-4" /> },
-            { id: "backup", label: t.nav.backupFlash, icon: <Save className="h-4 w-4" /> },
-            { id: "install", label: t.nav.installCatalog, icon: <Download className="h-4 w-4 text-emerald-400" />, badge: "Catalog" },
+            { id: "general", label: t.nav.generalSettings, icon: <Cpu className="h-4 w-4 text-zinc-400" /> },
+            { id: "admin", label: t.nav.adminSsh, icon: <Key className="h-4 w-4 text-zinc-400" /> },
+            { id: "software", label: t.nav.softwarePackages, icon: <Package className="h-4 w-4 text-zinc-400" /> },
+            { id: "services", label: t.nav.startupServices, icon: <RotateCw className="h-4 w-4 text-zinc-400" /> },
+            { id: "tasks", label: t.nav.scheduledTasks, icon: <Calendar className="h-4 w-4 text-zinc-400" /> },
+            { id: "backup", label: t.nav.backupFlash, icon: <Save className="h-4 w-4 text-zinc-400" /> },
+            { id: "install", label: t.nav.installCatalog, icon: <Download className="h-4 w-4 text-zinc-400" />, badge: "Catalog" },
           ],
         },
       ];
@@ -275,12 +272,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, onSelectRoute, i
         </div>
 
         {/* Footer Info & Quick Wizard */}
-        <div className="border-t border-zinc-800/80 p-3 bg-zinc-950 space-y-2.5">
+        <div className="border-t border-zinc-800/80 p-3 bg-zinc-950 space-y-2">
           <button
             onClick={() => useWizardStore.getState().openWizard()}
-            className="w-full flex items-center justify-center gap-2 py-1.5 px-3 rounded-md bg-gradient-to-r from-amber-500/10 via-amber-500/20 to-orange-500/10 hover:from-amber-500/20 hover:to-orange-500/20 border border-amber-500/30 text-amber-300 text-xs font-medium transition-all shadow-sm"
+            className="w-full flex items-center justify-center gap-2 py-1.5 px-3 rounded-md bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 hover:text-zinc-100 text-xs font-medium transition-colors"
           >
-            <Wand2 className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+            <Wand2 className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
             <span>{t.nav.setupWizard}</span>
           </button>
           <div className="flex items-center justify-between text-[11px] pt-0.5">

@@ -54,7 +54,7 @@ export const ExplainRoute: React.FC = () => {
       {/* Header */}
       <div>
         <h2 className="text-base font-bold text-zinc-100 flex items-center gap-2">
-          <HelpCircle className="h-5 w-5 text-purple-400" />
+          <HelpCircle className="h-5 w-5 text-zinc-400" />
           <span>{isRu ? "Диагностика решений: Почему трафик идёт именно так? (Explain Route)" : "Routing Decision Diagnostic (Explain Route)"}</span>
         </h2>
         <p className="text-xs text-zinc-400 mt-0.5">
@@ -91,9 +91,9 @@ export const ExplainRoute: React.FC = () => {
             <Button
               onClick={() => handleEvaluate()}
               size="sm"
-              className="h-9 px-4 text-xs bg-purple-600 hover:bg-purple-500 text-white font-medium gap-1.5"
+              className="h-9 px-4 text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-950 font-medium gap-1.5"
             >
-              <Activity className="h-3.5 w-3.5" />
+              <Activity className="h-3.5 w-3.5 text-zinc-900" />
               {isRu ? "Объяснить маршрут" : "Explain Route"}
             </Button>
           </div>
@@ -112,7 +112,7 @@ export const ExplainRoute: React.FC = () => {
                 }}
                 className={`text-[10px] font-mono px-2 py-0.5 rounded border transition-colors ${
                   target === s.val
-                    ? "bg-purple-950/40 text-purple-300 border-purple-800"
+                    ? "bg-zinc-800 text-zinc-100 border-zinc-700"
                     : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200"
                 }`}
               >
@@ -140,7 +140,7 @@ export const ExplainRoute: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2">
-              <Badge className="bg-purple-950/80 text-purple-300 border border-purple-800/80 font-mono text-[11px]">
+              <Badge className="bg-zinc-800 text-zinc-200 border border-zinc-700 font-mono text-[11px]">
                 {result.selectedAction.toUpperCase()}
               </Badge>
               <Badge variant="outline" className="font-mono text-[11px] bg-zinc-950 border-zinc-800 text-emerald-400">
@@ -153,7 +153,7 @@ export const ExplainRoute: React.FC = () => {
           {/* Main winning rule explanation */}
           <div className="p-3.5 rounded-xl border border-zinc-800 bg-zinc-950 space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-purple-400 uppercase tracking-wider">
+              <span className="text-[11px] font-semibold text-zinc-300 uppercase tracking-wider">
                 {isRu ? "Победившая политика" : "Winning Policy"}
               </span>
               <span className="text-[11px] font-mono text-zinc-400">
@@ -211,8 +211,8 @@ export const ExplainRoute: React.FC = () => {
 
             {/* DPI */}
             <div className="p-3 rounded-lg bg-zinc-950/80 border border-zinc-800 space-y-1">
-              <div className="flex items-center gap-2 text-purple-400 text-xs font-semibold">
-                <Zap className="h-4 w-4" />
+              <div className="flex items-center gap-2 text-zinc-300 text-xs font-semibold">
+                <Zap className="h-4 w-4 text-zinc-400" />
                 <span>{isRu ? "DPI Обработка (Zapret)" : "DPI Processing (Zapret)"}</span>
               </div>
               <div className="text-xs font-mono text-zinc-200">
@@ -227,8 +227,8 @@ export const ExplainRoute: React.FC = () => {
 
             {/* Firewall */}
             <div className="p-3 rounded-lg bg-zinc-950/80 border border-zinc-800 space-y-1">
-              <div className="flex items-center gap-2 text-amber-400 text-xs font-semibold">
-                <Shield className="h-4 w-4" />
+              <div className="flex items-center gap-2 text-zinc-300 text-xs font-semibold">
+                <Shield className="h-4 w-4 text-zinc-400" />
                 <span>{isRu ? "Решение фаервола (fw4)" : "Firewall Decision (fw4)"}</span>
               </div>
               <div className="text-xs font-mono text-emerald-400">{result.firewallDecision}</div>
@@ -247,7 +247,7 @@ export const ExplainRoute: React.FC = () => {
                   key={m.policy.id}
                   className={`p-2.5 rounded-lg border text-xs flex items-center justify-between ${
                     m.isWinner
-                      ? "border-purple-500/60 bg-purple-950/20 text-zinc-100"
+                      ? "border-zinc-700 bg-zinc-900 text-zinc-100"
                       : "border-zinc-800 bg-zinc-950/40 text-zinc-400"
                   }`}
                 >
@@ -266,7 +266,7 @@ export const ExplainRoute: React.FC = () => {
                       {m.policy.action.type}
                     </Badge>
                     {m.isWinner && (
-                      <span className="text-[10px] font-semibold text-purple-400 uppercase tracking-wide">
+                      <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wide">
                         {isRu ? "★ Победитель" : "★ Winner"}
                       </span>
                     )}

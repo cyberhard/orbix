@@ -98,10 +98,10 @@ export const Header: React.FC<HeaderProps> = ({
           variant="outline"
           size="sm"
           onClick={() => useWizardStore.getState().openWizard()}
-          className="h-8 px-2 sm:px-2.5 text-xs font-medium gap-1.5 border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 hover:text-amber-200"
+          className="h-8 px-2 sm:px-2.5 text-xs font-medium gap-1.5 border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:bg-zinc-900 hover:text-zinc-100"
           title={lang === "ru" ? "Запустить пошаговый мастер настройки" : "Launch Setup Wizard"}
         >
-          <Wand2 className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+          <Wand2 className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
           <span className="hidden sm:inline text-[11px]">{t.nav.setupWizard}</span>
         </Button>
 
@@ -115,12 +115,12 @@ export const Header: React.FC<HeaderProps> = ({
         >
           {operatingMode === "simple" ? (
             <>
-              <Sparkles className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+              <Sparkles className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
               <span className="hidden sm:inline text-[11px]">{t.common.simpleMode}</span>
             </>
           ) : (
             <>
-              <SlidersHorizontal className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+              <SlidersHorizontal className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
               <span className="hidden sm:inline text-[11px]">{t.common.expertMode}</span>
             </>
           )}
