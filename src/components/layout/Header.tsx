@@ -16,7 +16,9 @@ import {
   Languages,
   Sparkles,
   SlidersHorizontal,
+  Wand2,
 } from "lucide-react";
+import { useWizardStore } from "@/services/wizard/wizard-store";
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -90,6 +92,18 @@ export const Header: React.FC<HeaderProps> = ({
             ⌘K
           </kbd>
         </button>
+
+        {/* Wizard Quick Launch */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => useWizardStore.getState().openWizard()}
+          className="h-8 px-2 sm:px-2.5 text-xs font-medium gap-1.5 border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 hover:text-amber-200"
+          title={lang === "ru" ? "Запустить пошаговый мастер настройки" : "Launch Setup Wizard"}
+        >
+          <Wand2 className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+          <span className="hidden sm:inline text-[11px]">{t.nav.setupWizard}</span>
+        </Button>
 
         {/* Operating Mode Switcher */}
         <Button

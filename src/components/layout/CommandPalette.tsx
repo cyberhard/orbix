@@ -18,8 +18,12 @@ import {
   Terminal,
   Package,
   Key,
+  Save,
+  Download,
+  Wand2,
 } from "lucide-react";
 import { useI18nStore } from "@/store/i18n-store";
+import { useWizardStore } from "@/services/wizard/wizard-store";
 
 interface CommandItem {
   id: string;
@@ -87,6 +91,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ onSelectRoute, i
     { id: "admin", title: t.nav.adminSsh, category: t.nav.system, icon: <Key className="h-4 w-4" />, action: () => onSelectRoute("admin") },
     { id: "software", title: t.nav.softwarePackages, category: t.nav.system, icon: <Package className="h-4 w-4" />, action: () => onSelectRoute("software") },
     { id: "services", title: t.nav.startupServices, category: t.nav.system, icon: <Cpu className="h-4 w-4" />, action: () => onSelectRoute("services") },
+    { id: "backup", title: t.nav.backupFlash, category: t.nav.system, icon: <Save className="h-4 w-4" />, action: () => onSelectRoute("backup") },
+    { id: "install", title: `${t.nav.installCatalog} (ImageBuilder & Devices)`, category: t.nav.system, icon: <Download className="h-4 w-4 text-emerald-400" />, action: () => onSelectRoute("install") },
+    { id: "wizard", title: `${t.nav.setupWizard} (First-Run Wizard)`, category: t.nav.system, icon: <Wand2 className="h-4 w-4 text-amber-400" />, action: () => useWizardStore.getState().openWizard() },
   ];
 
   const filtered = items.filter(

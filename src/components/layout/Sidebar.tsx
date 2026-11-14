@@ -26,10 +26,13 @@ import {
   SlidersHorizontal,
   BookmarkCheck,
   Server,
+  Download,
+  Wand2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18nStore } from "@/store/i18n-store";
 import { usePolicyStore } from "@/store/policy-store";
+import { useWizardStore } from "@/services/wizard/wizard-store";
 
 interface SidebarProps {
   currentRoute: string;
@@ -92,6 +95,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, onSelectRoute, i
             { id: "diagnostics", label: t.nav.diagnostics, icon: <Terminal className="h-4 w-4" /> },
             { id: "bandwidth", label: t.nav.realtimeGraphs, icon: <LineChart className="h-4 w-4" /> },
             { id: "general", label: t.nav.generalSettings, icon: <Cpu className="h-4 w-4" /> },
+            { id: "install", label: t.nav.installCatalog, icon: <Download className="h-4 w-4 text-emerald-400" />, badge: "Catalog" },
           ],
         },
       ]
@@ -171,6 +175,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, onSelectRoute, i
             { id: "services", label: t.nav.startupServices, icon: <RotateCw className="h-4 w-4" /> },
             { id: "tasks", label: t.nav.scheduledTasks, icon: <Calendar className="h-4 w-4" /> },
             { id: "backup", label: t.nav.backupFlash, icon: <Save className="h-4 w-4" /> },
+            { id: "install", label: t.nav.installCatalog, icon: <Download className="h-4 w-4 text-emerald-400" />, badge: "Catalog" },
           ],
         },
       ];
@@ -269,9 +274,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, onSelectRoute, i
           ))}
         </div>
 
-        {/* Footer Info */}
-        <div className="border-t border-zinc-800/80 p-3 bg-zinc-950">
-          <div className="flex items-center justify-between text-[11px]">
+        {/* Footer Info & Quick Wizard */}
+        <div className="border-t border-zinc-800/80 p-3 bg-zinc-950 space-y-2.5">
+          <button
+            onClick={() => useWizardStore.getState().openWizard()}
+            className="w-full flex items-center justify-center gap-2 py-1.5 px-3 rounded-md bg-gradient-to-r from-amber-500/10 via-amber-500/20 to-orange-500/10 hover:from-amber-500/20 hover:to-orange-500/20 border border-amber-500/30 text-amber-300 text-xs font-medium transition-all shadow-sm"
+          >
+            <Wand2 className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+            <span>{t.nav.setupWizard}</span>
+          </button>
+          <div className="flex items-center justify-between text-[11px] pt-0.5">
             <div className="flex flex-col">
               <span className="font-medium text-zinc-300">MediaTek Filogic</span>
               <span className="text-[10px] text-zinc-500">aarch64 • 1GB RAM</span>

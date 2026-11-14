@@ -35,6 +35,9 @@ import { Software } from "@/views/system/Software";
 import { StartupServices } from "@/views/system/StartupServices";
 import { ScheduledTasks } from "@/views/system/ScheduledTasks";
 import { BackupFlash } from "@/views/system/BackupFlash";
+import { HardwareCatalog } from "@/views/install/HardwareCatalog";
+import { SetupWizardModal } from "@/views/wizard/SetupWizardModal";
+import { useWizardStore } from "@/services/wizard/wizard-store";
 
 export const MainLayout: React.FC = () => {
   // Read initial route from URL hash (e.g. #/subscriptions, #/wireless, #/traffic)
@@ -53,6 +56,8 @@ export const MainLayout: React.FC = () => {
     if (hash === "subs" || hash === "sub" || hash === "happ") return "subscriptions";
     if (hash === "logs" || hash === "syslog") return "logs";
     if (hash === "fw" || hash === "firewall-rules") return "firewall";
+    if (hash === "install" || hash === "catalog" || hash === "firmware" || hash === "devices-catalog") return "install";
+    if (hash === "wizard" || hash === "setup") return "wizard";
     return hash || "overview";
   };
 
@@ -63,6 +68,10 @@ export const MainLayout: React.FC = () => {
   const { operatingMode } = usePolicyStore();
 
   const navigateTo = (route: string) => {
+    if (route === "wizard") {
+      useWizardStore.getState().openWizard();
+      return;
+    }
     if (typeof window !== "undefined") {
       window.location.hash = `#/${route}`;
     }
@@ -72,9 +81,19 @@ export const MainLayout: React.FC = () => {
   React.useEffect(() => {
     const onHashChange = () => {
       const route = getRouteFromHash();
+      if (route === "wizard") {
+        useWizardStore.getState().openWizard();
+      }
       setCurrentRouteState(route);
     };
     window.addEventListener("hashchange", onHashChange);
+
+    // Auto-launch wizard if requested in hash or first-run
+    const initialRoute = getRouteFromHash();
+    if (initialRoute === "wizard") {
+      useWizardStore.getState().openWizard();
+    }
+
     // If no hash present, default to #/overview
     if (window.location.hash === "" || window.location.hash === "#") {
       window.location.hash = "#/overview";
@@ -112,6 +131,8 @@ export const MainLayout: React.FC = () => {
       case "services": return t.nav.startupServices;
       case "tasks": return t.nav.scheduledTasks;
       case "backup": return t.nav.backupFlash;
+      case "install": return t.nav.installCatalog;
+      case "wizard": return t.nav.setupWizard;
       default: return t.nav.overview;
     }
   };
@@ -168,6 +189,10 @@ export const MainLayout: React.FC = () => {
         return <ScheduledTasks />;
       case "backup":
         return <BackupFlash />;
+      case "install":
+        return <HardwareCatalog />;
+      case "wizard":
+        return <HardwareCatalog />;
       default:
         return <Overview />;
     }
@@ -205,6 +230,7 @@ export const MainLayout: React.FC = () => {
       <UciStagingBar />
       <DiffModal />
       <RollbackModal />
+      <SetupWizardModal />
       <CommandPalette
         isOpen={paletteOpen}
         onClose={() => setPaletteOpen(false)}

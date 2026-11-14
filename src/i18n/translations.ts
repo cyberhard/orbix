@@ -66,6 +66,8 @@ export const translations = {
       startupServices: "Startup & Services",
       scheduledTasks: "Scheduled Tasks",
       backupFlash: "Backup & Flash",
+      installCatalog: "Firmware & Devices",
+      setupWizard: "Setup Wizard",
     },
     header: {
       searchPlaceholder: "Search settings... (⌘K)",
@@ -309,6 +311,8 @@ export const translations = {
       startupServices: "Службы автозапуска",
       scheduledTasks: "Планировщик задач",
       backupFlash: "Бэкап и прошивка",
+      installCatalog: "Устройства и прошивки",
+      setupWizard: "Мастер настройки",
     },
     header: {
       searchPlaceholder: "Поиск настроек... (⌘K)",
