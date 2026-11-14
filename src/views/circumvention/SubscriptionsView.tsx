@@ -54,6 +54,7 @@ export const SubscriptionsView: React.FC = () => {
     testAllLatencies,
     deleteNode,
     deleteSubscription,
+    hydrateFromRouterCache,
   } = useSubscriptionStore();
 
   const { language } = useI18nStore();
@@ -68,6 +69,13 @@ export const SubscriptionsView: React.FC = () => {
     setInputUrl(url);
     setInputApiKey(apiKey);
   }, [url, apiKey]);
+
+  // Auto-hydrate nodes from router cache or subscription URL if cookies/localStorage were wiped
+  useEffect(() => {
+    if (nodes.length === 0) {
+      hydrateFromRouterCache();
+    }
+  }, [nodes.length, hydrateFromRouterCache]);
 
   const showFeedbackToast = (msg: string) => {
     setFeedback(msg);

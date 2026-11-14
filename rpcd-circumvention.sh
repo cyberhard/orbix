@@ -91,6 +91,22 @@ case "$1" in
 		json_add_object "wifi_reload"
 		json_close_object
 
+		json_add_object "killswitch_set"
+		json_add_boolean "enabled" 1
+		json_add_string "scope" "str"
+		json_add_boolean "allow_lan" 1
+		json_close_object
+
+		json_add_object "killswitch_status"
+		json_close_object
+
+		json_add_object "sub_save_cache"
+		json_add_string "data" "str"
+		json_close_object
+
+		json_add_object "sub_get_cache"
+		json_close_object
+
 		json_dump
 		exit 0
 	;;
@@ -1213,6 +1229,118 @@ EOF
 				json_init
 				json_add_string "status" "ok"
 				json_dump
+			;;
+
+			killswitch_set)
+				read -r input
+				KS_ENABLED=$(echo "$input" | jsonfilter -e '@.enabled' 2>/dev/null)
+				KS_SCOPE=$(echo "$input" | jsonfilter -e '@.scope' 2>/dev/null)
+				[ -z "$KS_SCOPE" ] && KS_SCOPE="vpn_devices"
+
+				mkdir -p /etc/orbix /tmp/hosts /tmp/dnsmasq.d
+
+				if [ "$KS_ENABLED" = "1" ] || [ "$KS_ENABLED" = "true" ]; then
+					echo "{\"enabled\":true,\"scope\":\"$KS_SCOPE\",\"allow_lan\":true,\"updated_at\":$(date +%s)}" > /etc/orbix/killswitch.json
+					nft add table inet orbix_protection 2>/dev/null
+					nft 'add chain inet orbix_protection forward { type filter hook forward priority -5; policy accept; }' 2>/dev/null
+					nft flush chain inet orbix_protection forward 2>/dev/null
+					nft add rule inet orbix_protection forward ip daddr 192.168.1.0/24 accept 2>/dev/null
+					nft add rule inet orbix_protection forward ip saddr 192.168.1.0/24 ip daddr 192.168.1.0/24 accept 2>/dev/null
+					nft add rule inet orbix_protection forward ct state established,related accept 2>/dev/null
+					nft 'add rule inet orbix_protection forward oifname { "tun0", "awg0" } accept' 2>/dev/null
+
+					if [ "$KS_SCOPE" = "all" ]; then
+						nft 'add rule inet orbix_protection forward ip saddr 192.168.1.0/24 oifname { "wan", "eth0" } counter drop' 2>/dev/null
+						nft add table inet orbix_isolation 2>/dev/null
+						nft 'add chain inet orbix_isolation dstnat { type nat hook prerouting priority dstnat - 10; policy accept; }' 2>/dev/null
+						nft flush chain inet orbix_isolation dstnat 2>/dev/null
+						nft add rule inet orbix_isolation dstnat iifname "br-lan" ip daddr != 192.168.1.1 tcp dport { 80, 8080 } redirect to :80 2>/dev/null
+
+						cat << 'HOSTSEOF' > /tmp/hosts/orbix_isolated
+192.168.1.1 vk.com www.vk.com m.vk.com
+192.168.1.1 yandex.ru ya.ru www.yandex.ru
+192.168.1.1 google.com www.google.com
+192.168.1.1 youtube.com www.youtube.com
+192.168.1.1 t.me web.telegram.org
+192.168.1.1 instagram.com www.instagram.com
+192.168.1.1 connectivitycheck.gstatic.com
+192.168.1.1 detectportal.firefox.com
+192.168.1.1 captive.apple.com
+HOSTSEOF
+						echo "address=/#/192.168.1.1" > /tmp/dnsmasq.d/orbix_isolation.conf
+						chmod 644 /tmp/hosts/orbix_isolated /tmp/dnsmasq.d/orbix_isolation.conf 2>/dev/null
+						killall -SIGHUP dnsmasq 2>/dev/null
+					else
+						nft delete table inet orbix_isolation 2>/dev/null
+						rm -f /tmp/hosts/orbix_isolated /tmp/dnsmasq.d/orbix_isolation.conf
+						killall -SIGHUP dnsmasq 2>/dev/null
+					fi
+				else
+					echo "{\"enabled\":false,\"scope\":\"$KS_SCOPE\",\"allow_lan\":true,\"updated_at\":$(date +%s)}" > /etc/orbix/killswitch.json
+					nft delete table inet orbix_protection 2>/dev/null
+					nft delete table inet orbix_isolation 2>/dev/null
+					rm -f /tmp/hosts/orbix_isolated /tmp/dnsmasq.d/orbix_isolation.conf
+					killall -SIGHUP dnsmasq 2>/dev/null
+				fi
+
+				IS_EN=0
+				[ "$KS_ENABLED" = "1" ] || [ "$KS_ENABLED" = "true" ] && IS_EN=1
+
+				json_init
+				json_add_string "status" "ok"
+				json_add_boolean "enabled" "$IS_EN"
+				json_add_string "scope" "$KS_SCOPE"
+				json_dump
+			;;
+
+			killswitch_status)
+				IS_ENABLED=0
+				SCOPE="vpn_devices"
+				if [ -f /etc/orbix/killswitch.json ]; then
+					STORED_EN=$(jsonfilter -i /etc/orbix/killswitch.json -e '@.enabled' 2>/dev/null)
+					if [ "$STORED_EN" = "true" ] || [ "$STORED_EN" = "1" ]; then
+						IS_ENABLED=1
+					fi
+					SCOPE=$(jsonfilter -i /etc/orbix/killswitch.json -e '@.scope' 2>/dev/null)
+					[ -z "$SCOPE" ] && SCOPE="vpn_devices"
+				fi
+
+				IS_ACTIVE=0
+				DROPPED=0
+				NFT_OUT=$(nft list table inet orbix_protection 2>/dev/null)
+				if [ -n "$NFT_OUT" ]; then
+					IS_ACTIVE=1
+					DROPPED=$(echo "$NFT_OUT" | grep "counter packets" | head -n 1 | awk '{for(i=1;i<=NF;i++) if($i=="packets") print $(i+1)}')
+					[ -z "$DROPPED" ] && DROPPED=0
+				fi
+
+				json_init
+				json_add_boolean "enabled" "$IS_ENABLED"
+				json_add_string "scope" "$SCOPE"
+				json_add_boolean "active" "$IS_ACTIVE"
+				json_add_int "dropped_packets" "$DROPPED"
+				json_add_boolean "blocked_wan" "$IS_ACTIVE"
+				json_dump
+			;;
+
+			sub_save_cache)
+				read -r input
+				mkdir -p /etc/orbix
+				echo "$input" | jsonfilter -e '@.data' 2>/dev/null > /etc/orbix/subscriptions.json
+				json_init
+				json_add_string "status" "ok"
+				json_dump
+			;;
+
+			sub_get_cache)
+				if [ -f /etc/orbix/subscriptions.json ] && [ -s /etc/orbix/subscriptions.json ]; then
+					cat /etc/orbix/subscriptions.json
+				else
+					json_init
+					json_add_object "data"
+					json_close_object
+					json_dump
+				fi
 			;;
 		esac
 	;;

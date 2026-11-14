@@ -64,7 +64,8 @@ interface SubscriptionState {
   updateGroup: (id: string, updates: Partial<VpnOutboundGroup>) => void;
   deleteGroup: (id: string) => void;
   toggleKillSwitch: (enabled?: boolean) => Promise<boolean>;
-  setKillSwitchScope: (scope: "all" | "vpn_devices") => void;
+  setKillSwitchScope: (scope: "all" | "vpn_devices") => Promise<void>;
+  hydrateFromRouterCache: () => Promise<boolean>;
 }
 
 export const useSubscriptionStore = create<SubscriptionState>()(
@@ -283,6 +284,22 @@ export const useSubscriptionStore = create<SubscriptionState>()(
             error: null,
           });
 
+          // Persist to router filesystem so cookie/localStorage deletion preserves the servers
+          if (newNodes.length > 0) {
+            try {
+              await ubusClient.call("circumvention", "sub_save_cache", {
+                data: JSON.stringify({
+                  nodes: newNodes,
+                  metadata: meta,
+                  activeNodeId: activeId,
+                  timestamp: Math.floor(Date.now() / 1000),
+                }),
+              });
+            } catch (err) {
+              console.warn("[SubscriptionStore] Failed to persist subscription to router cache:", err);
+            }
+          }
+
           // Automatically set outbound on router for active node
           if (newNodes.length > 0) {
             get().setActiveNode(newNodes[0].id).catch(console.error);
@@ -434,16 +451,71 @@ export const useSubscriptionStore = create<SubscriptionState>()(
 
       toggleKillSwitch: async (enabled) => {
         const nextEnabled = enabled !== undefined ? enabled : !get().killSwitch.enabled;
+        const currentScope = get().killSwitch.scope;
+
+        try {
+          await ubusClient.call("circumvention", "killswitch_set", {
+            enabled: nextEnabled,
+            scope: currentScope,
+            allow_lan: true,
+          });
+        } catch (err) {
+          console.error("[SubscriptionStore] Failed to sync kill switch to router:", err);
+        }
+
         set((state) => ({
           killSwitch: { ...state.killSwitch, enabled: nextEnabled },
         }));
         return true;
       },
 
-      setKillSwitchScope: (scope) => {
+      setKillSwitchScope: async (scope) => {
         set((state) => ({
           killSwitch: { ...state.killSwitch, scope },
         }));
+
+        if (get().killSwitch.enabled) {
+          try {
+            await ubusClient.call("circumvention", "killswitch_set", {
+              enabled: true,
+              scope,
+              allow_lan: true,
+            });
+          } catch (err) {
+            console.error("[SubscriptionStore] Failed to update kill switch scope on router:", err);
+          }
+        }
+      },
+
+      hydrateFromRouterCache: async () => {
+        try {
+          const res = await ubusClient.call("circumvention", "sub_get_cache");
+          if (res) {
+            let data: any = null;
+            if (res.nodes && Array.isArray(res.nodes)) {
+              data = res;
+            } else if (res.data) {
+              data = typeof res.data === "string" ? JSON.parse(res.data) : res.data;
+            }
+
+            if (data && data.nodes && Array.isArray(data.nodes) && data.nodes.length > 0) {
+              set({
+                nodes: data.nodes,
+                metadata: data.metadata || get().metadata,
+                activeNodeId: data.activeNodeId || data.nodes[0].id,
+              });
+              return true;
+            }
+          }
+        } catch (err) {
+          console.warn("[SubscriptionStore] Router cache unavailable:", err);
+        }
+
+        // If no cache in router either and nodes array is empty, auto-sync
+        if (get().nodes.length === 0 && get().url) {
+          return await get().syncSubscription();
+        }
+        return false;
       },
     }),
     {

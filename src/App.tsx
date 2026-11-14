@@ -30,9 +30,13 @@ export const App: React.FC = () => {
     }
   }, [isAuthenticated, fetchChanges]);
 
+  const isErrorRoute =
+    typeof window !== "undefined" &&
+    (window.location.hash.startsWith("#/errors") || window.location.hash.startsWith("#/error"));
+
   return (
     <QueryClientProvider client={queryClient}>
-      {isAuthenticated ? <MainLayout /> : <LoginView />}
+      {isAuthenticated || isErrorRoute ? <MainLayout /> : <LoginView />}
     </QueryClientProvider>
   );
 };

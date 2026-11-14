@@ -38,19 +38,19 @@ sh -c "$(wget -qO- https://raw.githubusercontent.com/cyberhard/orbix/main/script
 
 ### 1. Интерактивная топология сети (стиль Cisco Packet Tracer)
 Визуальная карта инфраструктуры в реальном времени. Перетаскивание узлов с мгновенным перерасчетом кабельных трасс, индикаторами портов и подробным инспектором устройств.
-![Топология сети ORBIX](docs/images/topology-ru-macos.png)
+![Топология сети ORBIX](docs/images/orbix-v1-topology-ru.png)
 
 ### 2. Главная панель и телеметрия в реальном времени
 Сводка состояния роутера: нагрузка CPU, ОЗУ, Flash, число активных DHCP-аренд с правильной русской плюрализацией (`6 устройств`), статус WAN, виджет защиты Kill Switch / Leak Guard и плавный векторный график скорости.
-![Обзор системы ORBIX](docs/images/overview-ru-macos.png)
+![Обзор системы ORBIX](docs/images/orbix-v1-overview-ru.png)
 
 ### 3. Единый движок маршрутизации и политик (PBR)
 Два режима работы: **Простой режим** для ответов на базовые вопросы («куда направить YouTube или ТВ») и **Экспертный режим** для тонкой настройки таблиц маршрутизации, меток fwmark и сетов `nftables`.
-![Движок политик ORBIX](docs/images/policies-ru-macos.png)
+![Движок политик ORBIX](docs/images/orbix-v1-policies-ru.png)
 
 ### 4. Каталог оборудования и портал прошивок
 Готовые официальные сборки OpenWrt с предустановленным ORBIX, контрольные суммы SHA-256 и пошаговые инструкции по прошивке (Factory, Sysupgrade, восстановление TFTP).
-![Каталог оборудования ORBIX](docs/images/catalog-ru-macos.png)
+![Каталог оборудования ORBIX](docs/images/orbix-v1-catalog-ru.png)
 
 ---
 

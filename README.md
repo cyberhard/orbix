@@ -38,19 +38,19 @@ sh -c "$(wget -qO- https://raw.githubusercontent.com/cyberhard/orbix/main/script
 
 ### 1. Interactive Network Topology & Infrastructure Map (`#/traffic`)
 Real-time Cisco Packet Tracer-style interactive topology view. Drag-and-drop nodes with live cable recalculation, port status indicators, and instant node inspection.
-![ORBIX Network Topology](docs/images/topology-en-macos.png)
+![ORBIX Network Topology](docs/images/orbix-v1-topology-en.png)
 
 ### 2. Overview Dashboard & Telemetry (`#/overview`)
 Real-time CPU, RAM, Flash, active DHCP leases with correct pluralization, WAN status, network security guard, and smooth SVG throughput graph with time range selector.
-![ORBIX Overview Dashboard](docs/images/overview-en-macos.png)
+![ORBIX Overview Dashboard](docs/images/orbix-v1-overview-en.png)
 
 ### 3. Unified Policy-Based Routing Engine (`#/policies`)
 Dual-mode policy manager (Simple Mode for beginners, Expert Mode for network architects) translating natural requirements into atomic `nftables`, `pbr`, and `zapret` rules.
-![ORBIX Policy Engine](docs/images/policies-en-macos.png)
+![ORBIX Policy Engine](docs/images/orbix-v1-policies-en.png)
 
 ### 4. Hardware Catalog & Universal Firmware Portal (`#/install`)
 Pre-compiled OpenWrt images, SHA-256 checksums, and step-by-step flashing guides for MediaTek Filogic, x86/64, and Qualcomm routers.
-![ORBIX Hardware Catalog](docs/images/catalog-en-macos.png)
+![ORBIX Hardware Catalog](docs/images/orbix-v1-catalog-en.png)
 
 ---
 

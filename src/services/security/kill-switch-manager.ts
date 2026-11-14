@@ -24,7 +24,18 @@ class KillSwitchManager {
 
   public async getRuntimeState(): Promise<KillSwitchRuntimeState> {
     try {
-      // Query kernel nftables state via file exec
+      // Query router killswitch status via dedicated circumvention RPC
+      const statusRes = await ubusClient.call("circumvention", "killswitch_status");
+      if (statusRes) {
+        this.runtimeState.enabled = Boolean(statusRes.enabled);
+        this.runtimeState.active = Boolean(statusRes.active);
+        this.runtimeState.scope = (statusRes.scope as any) || "vpn_devices";
+        this.runtimeState.activeDropRulesCount = Number(statusRes.dropped_packets) || 0;
+        this.runtimeState.blockedWan = Boolean(statusRes.blocked_wan);
+        return { ...this.runtimeState };
+      }
+
+      // Query kernel nftables state via file exec as fallback
       const res = await ubusClient.exec("nft", ["list", "table", "inet", "orbix_protection"]);
       if (res && res.code === 0 && res.stdout) {
         this.runtimeState.active = true;
@@ -60,25 +71,33 @@ class KillSwitchManager {
     this.runtimeState.protectedDevices = devices;
 
     try {
-      // Build atomic nftables script
+      // Use atomic router RPC call
+      const rpcRes = await ubusClient.call("circumvention", "killswitch_set", {
+        enabled: true,
+        scope,
+        allow_lan: allowLan,
+      });
+
+      if (rpcRes && rpcRes.status === "ok") {
+        this.runtimeState.active = true;
+        await this.auditTunnelHealth();
+        return true;
+      }
+
+      // Fallback: build atomic nftables script via exec if available
       const commands = [
         "add table inet orbix_protection",
         "add chain inet orbix_protection forward { type filter hook forward priority -5; policy accept; }",
         "flush chain inet orbix_protection forward",
       ];
 
-      // 1. Always allow router management access (Zero-lockout guarantee)
       if (allowLan) {
         commands.push("add rule inet orbix_protection forward ip daddr 192.168.1.0/24 accept");
       }
 
-      // 2. Allow established / related packets
       commands.push("add rule inet orbix_protection forward ct state established,related accept");
-
-      // 3. Allow traffic egressing via encrypted tunnels
       commands.push('add rule inet orbix_protection forward oifname { "tun0", "awg0" } accept');
 
-      // 4. Drop unencrypted WAN fallback
       if (scope === "all") {
         commands.push('add rule inet orbix_protection forward ip saddr 192.168.1.0/24 oifname { "wan", "eth0" } counter drop');
       } else if (devices.length > 0) {
@@ -90,10 +109,7 @@ class KillSwitchManager {
       const res = await ubusClient.exec("nft", [script]);
 
       this.runtimeState.active = res?.code === 0;
-
-      // Check tunnel health immediately
       await this.auditTunnelHealth();
-
       return true;
     } catch (err) {
       console.error("[KillSwitchManager] Failed to apply nftables rules:", err);
@@ -107,7 +123,12 @@ class KillSwitchManager {
     this.runtimeState.blockedWan = false;
 
     try {
-      await ubusClient.exec("nft", ["delete", "table", "inet", "orbix_protection"]);
+      await ubusClient.call("circumvention", "killswitch_set", {
+        enabled: false,
+        scope: this.runtimeState.scope,
+        allow_lan: true,
+      });
+      await ubusClient.exec("nft", ["delete", "table", "inet", "orbix_protection"]).catch(() => null);
       return true;
     } catch {
       return false;

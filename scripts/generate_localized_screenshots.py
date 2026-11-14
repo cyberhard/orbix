@@ -133,6 +133,8 @@ async def main():
                         localStorage.setItem('openwrt_theme', 'dark');
                         localStorage.removeItem('orbix_topology_node_positions_v4');
                         localStorage.removeItem('orbix_topology_node_positions_v5');
+                        localStorage.removeItem('orbix_topology_node_positions_v6');
+                        localStorage.removeItem('orbix_topology_node_positions_v7');
                         document.documentElement.classList.add('dark');
                         location.hash = '{route}';
                         location.reload();
@@ -154,10 +156,14 @@ async def main():
 
                     title = title_ru if lang == 'ru' else title_en
                     final_path = os.path.join(img_dir, f"{name}-{lang}-macos.png")
+                    cache_bust_path = os.path.join(img_dir, f"orbix-v1-{name}-{lang}.png")
                     create_macos_window(raw_path, final_path, title=title)
+                    create_macos_window(raw_path, cache_bust_path, title=title)
                     if name == "topology":
                         traffic_path = os.path.join(img_dir, f"traffic-{lang}-macos.png")
+                        traffic_bust_path = os.path.join(img_dir, f"orbix-v1-traffic-{lang}.png")
                         create_macos_window(raw_path, traffic_path, title=title)
+                        create_macos_window(raw_path, traffic_bust_path, title=title)
 
     finally:
         proc.terminate()

@@ -61,7 +61,7 @@ export interface TopologyLink {
   speed?: string;
 }
 
-const STORAGE_KEY_POSITIONS = "orbix_topology_node_positions_v5";
+const STORAGE_KEY_POSITIONS = "orbix_topology_node_positions_v7";
 
 // Dedicated Network Icons matching Reference Design Exactly
 const CoreRouterIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -105,16 +105,24 @@ const WifiApIcon: React.FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
-// Perfectly calibrated coordinates matching reference screenshot
+// Perfectly calibrated coordinates matching authentic OpenWrt SoC & network topology
 const DEFAULT_POSITIONS: Record<string, { x: number; y: number }> = {
-  "server-wan": { x: 180, y: 165 },
-  "server-singbox": { x: 180, y: 420 },
-  "router-core": { x: 480, y: 290 },
-  "switch-lan": { x: 770, y: 165 },
-  "switch-aux": { x: 770, y: 420 },
-  "ap-5g": { x: 915, y: 90 },
-  "ap-24g": { x: 915, y: 290 },
-  "ap-guest": { x: 915, y: 490 },
+  "server-wan": { x: 140, y: 170 },
+  "server-singbox": { x: 140, y: 430 },
+  "router-core": { x: 380, y: 300 },
+  "switch-lan": { x: 640, y: 140 },
+  "ap-5g": { x: 640, y: 290 },
+  "ap-24g": { x: 640, y: 480 },
+  "switch-aux": { x: 640, y: 550 },
+  "ap-guest": { x: 820, y: 550 },
+  "host-192-168-1-176": { x: 870, y: 140 },
+  "host-192-168-1-178": { x: 850, y: 230 },
+  "host-192-168-1-159": { x: 970, y: 230 },
+  "host-192-168-1-249": { x: 850, y: 320 },
+  "host-192-168-1-130": { x: 970, y: 320 },
+  "host-192-168-1-217": { x: 850, y: 400 },
+  "host-192-168-1-170": { x: 850, y: 480 },
+  "host-192-168-1-204": { x: 970, y: 480 },
 };
 
 export const TrafficFlow: React.FC = () => {
@@ -129,8 +137,8 @@ export const TrafficFlow: React.FC = () => {
   // Fullscreen state
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // View Mode: infrastructure (8 core nodes matching reference diagram) vs all (includes client devices)
-  const [viewMode, setViewMode] = useState<"infrastructure" | "all">("infrastructure");
+  // View Mode: "all" displays full topology with all connected devices by default
+  const [viewMode, setViewMode] = useState<"infrastructure" | "all">("all");
 
   // Pan and Zoom
   const [zoom, setZoom] = useState<number>(1);
@@ -328,7 +336,7 @@ export const TrafficFlow: React.FC = () => {
       routingTarget: "Guest Network Bridge",
     });
 
-    // 6. AP-01 (Wi-Fi 5 GHz)
+    // 6. AP-01 (Wi-Fi 5 GHz - SoC Direct Radio)
     const ap1Pos = nodePositions["ap-5g"] || DEFAULT_POSITIONS["ap-5g"];
     const ssid5G = radio5G?.interfaces?.[0]?.ssid || "OpenWRT";
     const ch5G = radio5G?.channel || 36;
@@ -345,7 +353,7 @@ export const TrafficFlow: React.FC = () => {
       routingTarget: `SSID: ${ssid5G}`,
     });
 
-    // 7. AP-02 (Wi-Fi 2.4 GHz)
+    // 7. AP-02 (Wi-Fi 2.4 GHz - SoC Direct Radio)
     const ap2Pos = nodePositions["ap-24g"] || DEFAULT_POSITIONS["ap-24g"];
     const ssid24G = radio24G?.interfaces?.[0]?.ssid || "OpenWRT";
     const ch24G = radio24G?.channel || 1;
@@ -362,20 +370,36 @@ export const TrafficFlow: React.FC = () => {
       routingTarget: `SSID: ${ssid24G}`,
     });
 
-    // 8. AP-03 (Offline AP matching reference)
-    const ap3Pos = nodePositions["ap-guest"] || DEFAULT_POSITIONS["ap-guest"];
-    list.push({
-      id: "ap-guest",
-      name: "AP-03",
-      sublabel: isRu ? "Гостевая Wi-Fi точка (Offline)" : "Guest AP (Offline)",
-      type: "ap",
-      status: "offline",
-      x: ap3Pos.x,
-      y: ap3Pos.y,
-      interfaceName: "phy0.2-guest",
-      linkSpeed: "0 Mbps (Down)",
-      routingTarget: "Disabled / Standby",
-    });
+    // 8. AP-03 & Switch-02 (Only in infrastructure comparison mode)
+    if (viewMode === "infrastructure") {
+      const sw2Pos = nodePositions["switch-aux"] || DEFAULT_POSITIONS["switch-aux"];
+      list.push({
+        id: "switch-aux",
+        name: "Switch-02",
+        sublabel: isRu ? "Резервный свитч" : "Aux Switch (Warning)",
+        type: "switch",
+        status: "warning",
+        x: sw2Pos.x,
+        y: sw2Pos.y,
+        interfaceName: "br-guest (VLAN 10)",
+        linkSpeed: "100 Mbps Half-Duplex",
+        routingTarget: "Guest Network Bridge",
+      });
+
+      const ap3Pos = nodePositions["ap-guest"] || DEFAULT_POSITIONS["ap-guest"];
+      list.push({
+        id: "ap-guest",
+        name: "AP-03",
+        sublabel: isRu ? "Гостевая Wi-Fi точка (Offline)" : "Guest AP (Offline)",
+        type: "ap",
+        status: "offline",
+        x: ap3Pos.x,
+        y: ap3Pos.y,
+        interfaceName: "phy0.2-guest",
+        linkSpeed: "0 Mbps (Down)",
+        routingTarget: "Disabled / Standby",
+      });
+    }
 
     // 9. Client Hosts from real DHCP Leases & ARP (included in "all" view mode)
     if (viewMode === "all") {
@@ -396,17 +420,41 @@ export const TrafficFlow: React.FC = () => {
         const name = l.hostname || (ip === "192.168.1.130" ? "Redmi-Note-9" : `Device-${ip.split(".")[3]}`);
         const lower = name.toLowerCase();
 
-        let defaultX = 990;
-        let defaultY = 80 + idx * 60;
+        let defaultX = 850;
+        let defaultY = 230;
         let iface = "phy0.1-ap0 (5 GHz)";
         let speed = "433 Mbps";
 
         if (ip === "192.168.1.176" || lower.includes("quasar")) {
+          defaultX = 870;
+          defaultY = 140;
           iface = "eth1 (LAN Switch)";
           speed = "1 Gbps Full-Duplex";
         } else if (lower.includes("tv") || lower.includes("pristavka")) {
+          defaultX = 850;
+          defaultY = 480;
           iface = "phy0.0-ap0 (2.4 GHz)";
           speed = "72 Mbps";
+        } else if (lower.includes("tecno") || ip === "192.168.1.204") {
+          defaultX = 970;
+          defaultY = 480;
+          iface = "phy0.0-ap0 (2.4 GHz)";
+          speed = "144 Mbps";
+        } else if (lower.includes("pixel") || ip === "192.168.1.159") {
+          defaultX = 970;
+          defaultY = 230;
+        } else if (lower.includes("15") || ip === "192.168.1.249") {
+          defaultX = 850;
+          defaultY = 320;
+        } else if (lower.includes("note-9") || ip === "192.168.1.130") {
+          defaultX = 970;
+          defaultY = 320;
+        } else if (ip === "192.168.1.178" || lower.includes("13-pro")) {
+          defaultX = 850;
+          defaultY = 230;
+        } else {
+          defaultX = 850;
+          defaultY = 400;
         }
 
         const savedPos = nodePositions[hostId];
@@ -433,7 +481,7 @@ export const TrafficFlow: React.FC = () => {
     return list;
   }, [nodePositions, ifaces, leases, isRu, viewMode, board, vless, vlessLatency, lan, wan, radio5G, radio24G]);
 
-  // Assemble links between nodes exactly matching reference diagram
+  // Assemble links between nodes reflecting true OpenWrt SoC & physical network
   const links: TopologyLink[] = useMemo(() => {
     const list: TopologyLink[] = [
       {
@@ -458,34 +506,39 @@ export const TrafficFlow: React.FC = () => {
         status: "active",
       },
       {
-        id: "link-switch1-ap1",
-        source: "switch-lan",
-        target: "ap-5g",
-        type: "wired",
-        status: "active",
-      },
-      {
-        id: "link-switch1-ap2",
-        source: "switch-lan",
-        target: "ap-24g",
-        type: "wired",
-        status: "active",
-      },
-      {
-        id: "link-router-switch2",
+        id: "link-router-ap1",
         source: "router-core",
-        target: "switch-aux",
-        type: "wired",
-        status: "warning",
+        target: "ap-5g",
+        type: "wireless",
+        status: "active",
       },
       {
-        id: "link-switch2-ap3",
-        source: "switch-aux",
-        target: "ap-guest",
+        id: "link-router-ap2",
+        source: "router-core",
+        target: "ap-24g",
         type: "wireless",
-        status: "down", // dashed line in reference
+        status: "active",
       },
     ];
+
+    if (viewMode === "infrastructure") {
+      list.push(
+        {
+          id: "link-router-switch2",
+          source: "router-core",
+          target: "switch-aux",
+          type: "wired",
+          status: "warning",
+        },
+        {
+          id: "link-switch2-ap3",
+          source: "switch-aux",
+          target: "ap-guest",
+          type: "wireless",
+          status: "down",
+        }
+      );
+    }
 
     if (viewMode === "all") {
       nodes.forEach((n) => {
@@ -1057,6 +1110,17 @@ export const TrafficFlow: React.FC = () => {
                 <div>
                   <div className="font-medium text-foreground">{isRu ? "Точка доступа" : "Access Point"}</div>
                   <div className="text-[10px] text-muted-foreground">{isRu ? "Беспроводная AP" : "Wireless AP"}</div>
+                </div>
+              </div>
+
+              {/* Client Host */}
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-sky-500/50 bg-sky-500/10 text-sky-400 shrink-0">
+                  <Laptop className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="font-medium text-foreground">{isRu ? "Устройство" : "Client Host"}</div>
+                  <div className="text-[10px] text-muted-foreground">{isRu ? "ПК / Смартфон / TV" : "PC / Mobile / Media"}</div>
                 </div>
               </div>
             </CardContent>

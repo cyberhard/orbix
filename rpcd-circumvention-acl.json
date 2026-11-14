@@ -11,7 +11,9 @@
 					"singbox_test_node",
 					"podkop_status",
 					"pbr_status",
-					"pbr_trace"
+					"pbr_trace",
+					"killswitch_status",
+					"sub_get_cache"
 				]
 			}
 		},
@@ -28,7 +30,9 @@
 					"sub_decrypt_fetch",
 					"singbox_set_outbound",
 					"pbr_set_device_rule",
-					"wifi_reload"
+					"wifi_reload",
+					"killswitch_set",
+					"sub_save_cache"
 				]
 			}
 		}
