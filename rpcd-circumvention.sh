@@ -13,6 +13,244 @@ return_error() {
 	exit 0
 }
 
+format_json_array() {
+	_first=1
+	printf "["
+	for _item in $1; do
+		[ -z "$_item" ] && continue
+		[ "$_first" = "1" ] && _first=0 || printf ", "
+		printf "\"%s\"" "$_item"
+	done
+	printf "]"
+}
+
+generate_singbox_config() {
+	NODE_CONF="/etc/sing-box/active_node.json"
+	SERVER=""
+	PORT=443
+	UUID=""
+	SNI=""
+	PUBKEY=""
+	SHORTID=""
+	FP="firefox"
+	FLOW="xtls-rprx-vision"
+
+	if [ -f "$NODE_CONF" ]; then
+		SERVER=$(jsonfilter -i "$NODE_CONF" -e '@.server' 2>/dev/null)
+		PORT=$(jsonfilter -i "$NODE_CONF" -e '@.port' 2>/dev/null)
+		UUID=$(jsonfilter -i "$NODE_CONF" -e '@.uuid' 2>/dev/null)
+		SNI=$(jsonfilter -i "$NODE_CONF" -e '@.sni' 2>/dev/null)
+		PUBKEY=$(jsonfilter -i "$NODE_CONF" -e '@.publicKey' 2>/dev/null)
+		SHORTID=$(jsonfilter -i "$NODE_CONF" -e '@.shortId' 2>/dev/null)
+		FP=$(jsonfilter -i "$NODE_CONF" -e '@.fingerprint' 2>/dev/null)
+		FLOW=$(jsonfilter -i "$NODE_CONF" -e '@.flow' 2>/dev/null)
+	fi
+
+	if [ -z "$SERVER" ] && [ -f /etc/sing-box/config.json ]; then
+		SERVER=$(jsonfilter -i /etc/sing-box/config.json -e '@.outbounds[0].server' 2>/dev/null)
+		PORT=$(jsonfilter -i /etc/sing-box/config.json -e '@.outbounds[0].server_port' 2>/dev/null)
+		UUID=$(jsonfilter -i /etc/sing-box/config.json -e '@.outbounds[0].uuid' 2>/dev/null)
+		SNI=$(jsonfilter -i /etc/sing-box/config.json -e '@.outbounds[0].tls.server_name' 2>/dev/null)
+		PUBKEY=$(jsonfilter -i /etc/sing-box/config.json -e '@.outbounds[0].tls.reality.public_key' 2>/dev/null)
+		SHORTID=$(jsonfilter -i /etc/sing-box/config.json -e '@.outbounds[0].tls.reality.short_id' 2>/dev/null)
+	fi
+
+	[ -z "$FP" ] && FP="firefox"
+	[ -z "$FLOW" ] && FLOW="xtls-rprx-vision"
+	[ -z "$SNI" ] && SNI="$SERVER"
+	[ -z "$PORT" ] && PORT=443
+
+	POL_FILE="/etc/orbix/policies.json"
+	BLOCKED_DOMS=""
+	DIRECT_DOMS=""
+	PROXY_DOMS=""
+	if [ -f "$POL_FILE" ]; then
+		BLOCKED_DOMS=$(jsonfilter -i "$POL_FILE" -e '@.blocked_domains[*]' 2>/dev/null)
+		DIRECT_DOMS=$(jsonfilter -i "$POL_FILE" -e '@.direct_domains[*]' 2>/dev/null)
+		PROXY_DOMS=$(jsonfilter -i "$POL_FILE" -e '@.proxy_domains[*]' 2>/dev/null)
+	fi
+
+	# Always ensure Discord domains are in proxy domains (unless blocked) so Voice WebRTC & Gateway connect reliably
+	DISCORD_DOMS="discord.com discord.gg discord.media discordapp.com discordapp.net discord.co discordstatus.com gateway.discord.gg cdn.discordapp.com stable.dl2.discordapp.net"
+	for _dc in $DISCORD_DOMS; do
+		_is_blocked=0
+		for _bd in $BLOCKED_DOMS; do
+			if [ "$_dc" = "$_bd" ] || [ ".${_dc##*.}" = "$_bd" ]; then
+				_is_blocked=1
+				break
+			fi
+		done
+		if [ "$_is_blocked" = "0" ]; then
+			case " $PROXY_DOMS " in
+				*" $_dc "*) ;;
+				*) PROXY_DOMS="$PROXY_DOMS $_dc" ;;
+			esac
+		fi
+	done
+
+	# Clean & deduplicate blocked domains
+	CLEAN_BLOCKED=""
+	for d in $BLOCKED_DOMS; do
+		cdom=$(echo "$d" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9.-')
+		[ -n "$cdom" ] && CLEAN_BLOCKED="$CLEAN_BLOCKED $cdom"
+	done
+
+	# Clean proxy domains (exclude blocked)
+	CLEAN_PROXY=""
+	for d in $PROXY_DOMS; do
+		cdom=$(echo "$d" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9.-')
+		[ -z "$cdom" ] && continue
+		case " $CLEAN_BLOCKED " in
+			*" $cdom "*) continue ;;
+		esac
+		CLEAN_PROXY="$CLEAN_PROXY $cdom"
+	done
+
+	# Clean direct domains (exclude blocked and proxy)
+	CLEAN_DIRECT=""
+	for d in $DIRECT_DOMS; do
+		cdom=$(echo "$d" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9.-')
+		[ -z "$cdom" ] && continue
+		case " $CLEAN_BLOCKED " in
+			*" $cdom "*) continue ;;
+		esac
+		case " $CLEAN_PROXY " in
+			*" $cdom "*) continue ;;
+		esac
+		CLEAN_DIRECT="$CLEAN_DIRECT $cdom"
+	done
+
+	BLOCKED_JSON=$(format_json_array "$CLEAN_BLOCKED")
+	PROXY_JSON=$(format_json_array "$CLEAN_PROXY")
+	DIRECT_JSON=$(format_json_array "$CLEAN_DIRECT")
+
+	mkdir -p /etc/sing-box /tmp/singbox
+	cat << EOF > /tmp/singbox/config.json.tmp
+{
+  "log": { "level": "info" },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "interface_name": "singbox",
+      "address": [ "172.19.0.1/30" ],
+      "auto_route": false,
+      "strict_route": false,
+      "stack": "gvisor"
+    },
+    {
+      "type": "mixed",
+      "tag": "mixed-in",
+      "listen": "127.0.0.1",
+      "listen_port": 10808
+    },
+    {
+      "type": "direct",
+      "tag": "dns-in",
+      "listen": "127.0.0.1",
+      "listen_port": 5353,
+      "override_address": "8.8.8.8",
+      "override_port": 53
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "vless",
+      "tag": "proxy",
+      "server": "$SERVER",
+      "server_port": $PORT,
+      "uuid": "$UUID",
+      "flow": "$FLOW",
+      "tls": {
+        "enabled": true,
+        "server_name": "${SNI:-$SERVER}",
+        "utls": { "enabled": true, "fingerprint": "$FP" },
+        "reality": {
+          "enabled": $( [ -n "$PUBKEY" ] && echo "true" || echo "false" ),
+          "public_key": "$PUBKEY",
+          "short_id": "$SHORTID"
+        }
+      }
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "auto_detect_interface": true,
+    "rules": [
+      {
+        "inbound": "dns-in",
+        "action": "hijack-dns"
+      },
+      {
+        "action": "sniff"
+      },
+      {
+        "ip_is_private": true,
+        "outbound": "direct"
+      }$([ -n "$CLEAN_BLOCKED" ] && echo ",
+      {
+        \"domain_suffix\": $BLOCKED_JSON,
+        \"action\": \"reject\"
+      }")$([ -n "$CLEAN_PROXY" ] && echo ",
+      {
+        \"domain_suffix\": $PROXY_JSON,
+        \"outbound\": \"proxy\"
+      }")$([ -n "$CLEAN_DIRECT" ] && echo ",
+      {
+        \"domain_suffix\": $DIRECT_JSON,
+        \"outbound\": \"direct\"
+      }")
+    ],
+    "final": "direct",
+    "default_domain_resolver": "yandex"
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "google-doh",
+        "type": "https",
+        "server": "dns.google",
+        "server_port": 443,
+        "domain_resolver": "yandex"
+      },
+      {
+        "tag": "google-dot",
+        "type": "tls",
+        "server": "dns.google",
+        "server_port": 853,
+        "domain_resolver": "yandex"
+      },
+      {
+        "tag": "yandex",
+        "type": "udp",
+        "server": "77.88.8.8",
+        "server_port": 53
+      }
+    ],
+    "rules": [
+      {
+        "domain_suffix": [ ".ru", ".su", ".xn--p1ai", "yandex.ru", "ya.ru" ],
+        "server": "yandex"
+      }
+    ],
+    "final": "google-doh"
+  }
+}
+EOF
+
+	if sing-box check -c /tmp/singbox/config.json.tmp >/dev/null 2>&1; then
+		mv /tmp/singbox/config.json.tmp /etc/sing-box/config.json
+		/etc/init.d/sing-box restart >/dev/null 2>&1 &
+		return 0
+	else
+		rm -f /tmp/singbox/config.json.tmp
+		return 1
+	fi
+}
+
 case "$1" in
 	list)
 		json_init
@@ -1210,66 +1448,8 @@ EOF_WD
 				[ -z "$FLOW" ] && FLOW="xtls-rprx-vision"
 
 				if [ -n "$SERVER" ] && [ -n "$UUID" ]; then
-					cat <<EOF > /etc/sing-box/config.json
-{
-  "log": { "level": "info" },
-  "inbounds": [
-    {
-      "type": "tun",
-      "tag": "tun-in",
-      "interface_name": "singbox",
-      "address": [ "172.19.0.1/30" ],
-      "auto_route": false,
-      "strict_route": false,
-      "stack": "mixed"
-    },
-    {
-      "type": "mixed",
-      "tag": "mixed-in",
-      "listen": "127.0.0.1",
-      "listen_port": 10808
-    }
-  ],
-  "outbounds": [
-    {
-      "type": "vless",
-      "tag": "proxy",
-      "server": "$SERVER",
-      "server_port": $PORT,
-      "uuid": "$UUID",
-      "flow": "$FLOW",
-      "tls": {
-        "enabled": true,
-        "server_name": "${SNI:-$SERVER}",
-        "utls": { "enabled": true, "fingerprint": "$FP" },
-        "reality": {
-          "enabled": $( [ -n "$PUBKEY" ] && echo "true" || echo "false" ),
-          "public_key": "$PUBKEY",
-          "short_id": "$SHORTID"
-        }
-      }
-    },
-    {
-      "type": "direct",
-      "tag": "direct"
-    }
-  ],
-  "route": {
-    "auto_detect_interface": true,
-    "rules": [
-      {
-        "inbound": ["tun-in", "mixed-in"],
-        "action": "route",
-        "outbound": "proxy"
-      }
-    ],
-    "final": "proxy"
-  }
-}
-EOF
+					generate_singbox_config
 				fi
-
-				/etc/init.d/sing-box restart >/dev/null 2>&1 &
 
 				json_init
 				json_add_string "status" "ok"
@@ -1429,7 +1609,7 @@ HOSTSEOF
 
 					for dom in $BLOCKED_DOMS; do
 						BLOCKED_COUNT=$((BLOCKED_COUNT + 1))
-						CLEAN_DOM=$(echo "$dom" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9.-')
+						CLEAN_DOM=$(echo "$dom" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9.-')
 						[ -z "$CLEAN_DOM" ] && continue
 
 						if echo "$CLEAN_DOM" | grep -q '^\.'; then
@@ -1439,6 +1619,9 @@ address=/${BARE_TLD}/192.168.1.2
 "
 						else
 							HOSTS_LINE="$HOSTS_LINE $CLEAN_DOM"
+							CONF_CONTENT="${CONF_CONTENT}server=/${CLEAN_DOM}/
+address=/${CLEAN_DOM}/192.168.1.2
+"
 							case "$CLEAN_DOM" in
 								vk.com) HOSTS_LINE="$HOSTS_LINE www.vk.com m.vk.com" ;;
 								gosuslugi.ru) HOSTS_LINE="$HOSTS_LINE www.gosuslugi.ru" ;;
@@ -1484,6 +1667,14 @@ NFTEOF
 					killall -SIGHUP dnsmasq 2>/dev/null || true
 					nft delete table inet orbix_policies 2>/dev/null || true
 				fi
+
+				# Ensure 192.168.1.1 orbix.lan exists in /etc/hosts
+				if ! grep -q "orbix.lan" /etc/hosts 2>/dev/null; then
+					printf "192.168.1.1 orbix.lan openwrt.lan\n" >> /etc/hosts
+				fi
+
+				# Synchronize Sing-box with active policies and discord proxy
+				generate_singbox_config
 
 				json_init
 				json_add_string "status" "ok"

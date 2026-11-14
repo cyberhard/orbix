@@ -37,10 +37,6 @@ if [ -f /etc/orbix/captive.json ]; then
 fi
 
 PORTAL_HOST="192.168.1.1"
-if [ -f /etc/orbix/captive.json ]; then
-  DH=$(jsonfilter -i /etc/orbix/captive.json -e '@.portal_domain' 2>/dev/null)
-  [ -n "$DH" ] && PORTAL_HOST="$DH"
-fi
 
 if [ "$IS_RESTRICTED" = "1" ]; then
   cat << EOF

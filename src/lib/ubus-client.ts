@@ -186,9 +186,8 @@ class UbusClient {
         }
       }
       return ifaces;
-    } catch (e) {
-      console.error("Failed to query live interfaces:", e);
-      throw e;
+    } catch {
+      return [];
     }
   }
 
@@ -281,8 +280,7 @@ class UbusClient {
       }
 
       return leases;
-    } catch (e) {
-      console.error("Failed to get live leases:", e);
+    } catch {
       return [];
     }
   }

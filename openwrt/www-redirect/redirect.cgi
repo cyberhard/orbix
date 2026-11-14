@@ -10,10 +10,8 @@ SAFE_HOST=$(echo "$RAW_HOST" | tr -cd 'a-zA-Z0-9.-' | cut -c 1-128)
 [ -z "$SAFE_HOST" ] && SAFE_HOST="unknown"
 
 PORTAL_HOST="192.168.1.1"
-if [ -f /etc/orbix/captive.json ]; then
-  DH=$(jsonfilter -i /etc/orbix/captive.json -e '@.portal_domain' 2>/dev/null)
-  [ -n "$DH" ] && PORTAL_HOST="$DH"
-fi
+# We intentionally use router LAN IP 192.168.1.1 as redirect destination
+# so clients with external DoH/DoT or unconfigured local DNS never encounter NXDOMAIN.
 
 # Avoid redirect loops on router portal itself
 case "$SAFE_HOST" in

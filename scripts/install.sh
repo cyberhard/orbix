@@ -214,7 +214,15 @@ else
 					"singbox_test_node",
 					"podkop_status",
 					"pbr_status",
-					"pbr_trace"
+					"pbr_trace",
+					"killswitch_status",
+					"sub_get_cache",
+					"policy_status",
+					"captive_get_config",
+					"captive_get_status",
+					"captive_get_clients",
+					"captive_run_diagnostics",
+					"captive_cert_status"
 				]
 			}
 		},
@@ -231,7 +239,14 @@ else
 					"sub_decrypt_fetch",
 					"singbox_set_outbound",
 					"pbr_set_device_rule",
-					"wifi_reload"
+					"wifi_reload",
+					"killswitch_set",
+					"sub_save_cache",
+					"policy_apply",
+					"captive_set_config",
+					"captive_set_client_exemption",
+					"captive_cert_renew",
+					"captive_cert_upload"
 				]
 			}
 		}
@@ -239,6 +254,22 @@ else
 }
 EOF
 fi
+
+# Deploy Captive Portal & Error Router
+mkdir -p /www-redirect /www/cgi-bin
+if [ -f "./openwrt/www-redirect/redirect.cgi" ]; then
+    cp -f ./openwrt/www-redirect/redirect.cgi /www-redirect/redirect.cgi
+else
+    curl -sSL "https://raw.githubusercontent.com/cyberhard/orbix/main/openwrt/www-redirect/redirect.cgi" -o /www-redirect/redirect.cgi || true
+fi
+chmod +x /www-redirect/redirect.cgi
+
+if [ -f "./openwrt/www-cgi-bin/captive-portal" ]; then
+    cp -f ./openwrt/www-cgi-bin/captive-portal /www/cgi-bin/captive-portal
+else
+    curl -sSL "https://raw.githubusercontent.com/cyberhard/orbix/main/openwrt/www-cgi-bin/captive-portal" -o /www/cgi-bin/captive-portal || true
+fi
+chmod +x /www/cgi-bin/captive-portal
 
 # 5. Deploy Frontend Web UI
 echo -e "\n${COLOR_CYAN}--> Step 3/4: Deploying ORBIX Web UI...${COLOR_RESET}"

@@ -68,8 +68,8 @@ export const DEFAULT_NETWORK_POLICIES: NetworkPolicy[] = [
   },
   {
     id: "sys-policy-discord-zapret",
-    name: "Discord и голосовые шлюзы (Zapret DPI Desync)",
-    description: "Обход блокировок ТСПУ для discord.com и голосовых каналов WebRTC discord.media",
+    name: "Discord и голосовые шлюзы (Туннель VLESS Reality)",
+    description: "Надёжный обход блокировок ТСПУ для discord.com и голосовых каналов WebRTC discord.media через зарубежный туннель",
     enabled: true,
     priority: 25,
     isSystem: true,
@@ -83,9 +83,9 @@ export const DEFAULT_NETWORK_POLICIES: NetworkPolicy[] = [
       values: ["category:discord"],
     },
     action: {
-      type: "zapret_dpi",
-      target: "profile:multisplit",
-      fallbackAction: "vpn_tunnel",
+      type: "vpn_tunnel",
+      target: "singbox",
+      fallbackAction: "direct_wan",
     },
   },
   {

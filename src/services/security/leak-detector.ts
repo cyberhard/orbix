@@ -36,12 +36,17 @@ class LeakDetector {
       const wan = ifaces.find((i) => i.interface === "wan" || i.l3_device === "wan");
       const ispDns = wan?.dns_servers || [];
 
-      // Check /tmp/resolv.conf.auto
-      const resolvAuto = await ubusClient.readFile("/tmp/resolv.conf.auto");
-      const parsedIspServers = resolvAuto
-        .split("\n")
-        .filter((l) => l.startsWith("nameserver"))
-        .map((l) => l.replace("nameserver", "").trim());
+      // Check /tmp/resolv.conf.auto safely without triggering ACL errors
+      let parsedIspServers: string[] = [];
+      try {
+        const resolvAuto = await ubusClient.readFile("/tmp/resolv.conf.auto");
+        parsedIspServers = resolvAuto
+          .split("\n")
+          .filter((l) => l.startsWith("nameserver"))
+          .map((l) => l.replace("nameserver", "").trim());
+      } catch {
+        // Fallback to wan interface dns_servers if file is ACL restricted
+      }
 
       const activeDnsList = parsedIspServers.length > 0 ? parsedIspServers : (ispDns.length > 0 ? ispDns : ["77.88.8.8"]);
 
@@ -123,8 +128,8 @@ class LeakDetector {
         },
         overallStatus: dnsLeaking || ipLeaking ? "leaking" : !isRebindProtected ? "warning" : "secure",
       };
-    } catch (err) {
-      console.error("[LeakDetector] Audit execution error:", err);
+    } catch {
+      // Safe fallback for audit execution
     }
 
     return this.lastAuditResult;

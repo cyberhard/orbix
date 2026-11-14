@@ -105,6 +105,7 @@ export class PolicyCompiler {
     const singboxDirectSet = new Set<string>();
     const singboxProxySet = new Set<string>();
     const singboxBlockSet = new Set<string>();
+    const claimedDomains = new Set<string>();
 
     for (const policy of activePolicies) {
       const domains = this.resolveDomains(policy.destination.values);
@@ -133,36 +134,37 @@ export class PolicyCompiler {
         }
       }
 
-      // B. Action compilation for destinations (Sing-box, Zapret, Direct)
-      switch (policy.action.type) {
-        case "direct_wan":
-          domains.forEach((d) => singboxDirectSet.add(d));
-          break;
+      // B. Action compilation for destinations with strict priority claiming
+      for (const d of domains) {
+        if (claimedDomains.has(d)) continue; // Higher priority policy already claimed this domain
+        claimedDomains.add(d);
 
-        case "zapret_dpi":
-          // Send to direct in singbox so TLS flows directly through nfqws on WAN
-          domains.forEach((d) => singboxDirectSet.add(d));
+        switch (policy.action.type) {
+          case "block":
+            singboxBlockSet.add(d);
+            break;
 
-          // Classify hostlist for Zapret
-          if (policy.action.target?.includes("hostfakesplit") || policy.id.includes("youtube")) {
-            domains.forEach((d) => zapretGoogleSet.add(d));
-          } else {
-            domains.forEach((d) => zapretGeneralSet.add(d));
-          }
-          break;
+          case "vpn_tunnel":
+          case "vpn_group":
+            singboxProxySet.add(d);
+            break;
 
-        case "vpn_tunnel":
-        case "vpn_group":
-          domains.forEach((d) => singboxProxySet.add(d));
-          break;
+          case "direct_wan":
+            singboxDirectSet.add(d);
+            break;
 
-        case "block":
-          domains.forEach((d) => singboxBlockSet.add(d));
-          break;
+          case "zapret_dpi":
+            singboxDirectSet.add(d);
+            if (policy.action.target?.includes("hostfakesplit") || policy.id.includes("youtube")) {
+              zapretGoogleSet.add(d);
+            } else {
+              zapretGeneralSet.add(d);
+            }
+            break;
 
-        case "default":
-          // System fallback
-          break;
+          case "default":
+            break;
+        }
       }
     }
 
@@ -170,7 +172,14 @@ export class PolicyCompiler {
     if (singboxBlockSet.size > 0) {
       compiled.singboxRules.push({
         domain_suffix: Array.from(singboxBlockSet),
-        outbound: "block",
+        action: "reject",
+      } as any);
+    }
+
+    if (singboxProxySet.size > 0) {
+      compiled.singboxRules.push({
+        domain_suffix: Array.from(singboxProxySet),
+        outbound: "proxy",
       });
     }
 
@@ -178,13 +187,6 @@ export class PolicyCompiler {
       compiled.singboxRules.push({
         domain_suffix: Array.from(singboxDirectSet),
         outbound: "direct",
-      });
-    }
-
-    if (singboxProxySet.size > 0) {
-      compiled.singboxRules.push({
-        domain_suffix: Array.from(singboxProxySet),
-        outbound: "proxy",
       });
     }
 

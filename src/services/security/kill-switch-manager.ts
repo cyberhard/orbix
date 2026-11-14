@@ -178,8 +178,8 @@ class KillSwitchManager {
           }
         }
       }
-    } catch (err) {
-      console.error("[KillSwitchManager] auditTunnelHealth error:", err);
+    } catch {
+      // Safe fallback for background tunnel audit
     }
   }
 
