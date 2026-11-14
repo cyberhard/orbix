@@ -11,7 +11,7 @@ import { z } from "zod";
 // Environment configuration
 const OPENWRT_HOST = process.env.OPENWRT_HOST || "http://192.168.1.1";
 const OPENWRT_USER = process.env.OPENWRT_USER || "root";
-const OPENWRT_PASS = process.env.OPENWRT_PASS || "root";
+const OPENWRT_PASS = process.env.OPENWRT_PASS || "";
 const FORCE_MOCK = process.env.OPENWRT_MOCK === "true";
 
 let cachedSessionId: string | null = null;
@@ -447,7 +447,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { url, api_key } = args as any;
         const res = await callUbus("circumvention", "sub_decrypt_fetch", {
           url,
-          api_key: api_key || "hd_889c9cc025a10885f358d1caefce6108",
+          api_key: api_key || process.env.HAPPY_DECODER_KEY || "",
           hwid: true,
         });
         return {

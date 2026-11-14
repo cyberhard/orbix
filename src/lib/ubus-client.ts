@@ -22,6 +22,9 @@ class UbusClient {
   private endpoint = "/ubus";
   private sessionId = "00000000000000000000000000000000";
   private reqId = 1;
+  private defaultTimeoutMs = 15000;
+  private loginPromise: Promise<string> | null = null;
+  private authExpiredDispatched = false;
 
   constructor() {
     if (typeof window !== "undefined") {
@@ -48,10 +51,36 @@ class UbusClient {
     return this.sessionId !== "00000000000000000000000000000000" && !!this.sessionId;
   }
 
+  private handleAuthExpired(): void {
+    this.sessionId = "00000000000000000000000000000000";
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("openwrt_session_id");
+      if (!this.authExpiredDispatched) {
+        this.authExpiredDispatched = true;
+        window.dispatchEvent(new CustomEvent("ubus_auth_expired"));
+        setTimeout(() => {
+          this.authExpiredDispatched = false;
+        }, 1000);
+      }
+    }
+  }
+
+  private combineSignals(signal1: AbortSignal, signal2: AbortSignal): AbortSignal {
+    if (typeof AbortSignal.any === "function") {
+      return AbortSignal.any([signal1, signal2]);
+    }
+    const controller = new AbortController();
+    const onAbort = () => controller.abort();
+    signal1.addEventListener("abort", onAbort, { once: true });
+    signal2.addEventListener("abort", onAbort, { once: true });
+    return controller.signal;
+  }
+
   public async call<T = unknown>(
     object: string,
     method: string,
-    params: Record<string, unknown> = {}
+    params: Record<string, unknown> = {},
+    options?: { timeoutMs?: number; signal?: AbortSignal }
   ): Promise<T> {
     const payload: UbusRpcRequest = {
       jsonrpc: "2.0",
@@ -60,30 +89,39 @@ class UbusClient {
       params: [this.sessionId, object, method, params],
     };
 
+    const timeoutMs = options?.timeoutMs ?? this.defaultTimeoutMs;
+    const timeoutSignal = AbortSignal.timeout(timeoutMs);
+    const signal = options?.signal ? this.combineSignals(options.signal, timeoutSignal) : timeoutSignal;
+
     try {
       const res = await fetch(this.endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
+        signal,
       });
 
       if (!res.ok) {
         throw new Error(`HTTP error ${res.status}: ${res.statusText}`);
       }
 
-      const json: UbusRpcResponse<T> = await res.json();
+      let json: UbusRpcResponse<T>;
+      try {
+        json = await res.json();
+      } catch (parseErr: unknown) {
+        throw new Error(
+          `Ubus JSON parse error: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`
+        );
+      }
 
       if (json.error) {
-        // Only invalidate session if core session or system call was rejected
         if (
-          (json.error.message === "Access denied" || json.error.code === -32002) &&
-          (object === "session" || (object === "system" && method === "board"))
+          json.error.message === "Access denied" ||
+          json.error.code === -32002 ||
+          json.error.message?.toLowerCase().includes("permission denied")
         ) {
-          this.sessionId = "00000000000000000000000000000000";
-          if (typeof window !== "undefined") {
-            localStorage.removeItem("openwrt_session_id");
-            window.dispatchEvent(new CustomEvent("ubus_auth_expired"));
-          }
+          this.handleAuthExpired();
+          throw new Error("Access denied: session expired or unauthorized");
         }
         throw new Error(json.error.message || `Ubus error ${json.error.code}`);
       }
@@ -94,13 +132,9 @@ class UbusClient {
 
       const [status, data] = json.result;
       if (status !== 0) {
-        if (status === 6 && (object === "session" || (object === "system" && method === "board"))) {
-          // UBUS_STATUS_PERMISSION_DENIED on core session/system object
-          this.sessionId = "00000000000000000000000000000000";
-          if (typeof window !== "undefined") {
-            localStorage.removeItem("openwrt_session_id");
-            window.dispatchEvent(new CustomEvent("ubus_auth_expired"));
-          }
+        if (status === 6) {
+          // UBUS_STATUS_PERMISSION_DENIED
+          this.handleAuthExpired();
           throw new Error("Session expired. Please log in again.");
         }
         throw new Error(`Ubus call returned error code: ${status}`);
@@ -108,35 +142,57 @@ class UbusClient {
 
       return data as T;
     } catch (err: unknown) {
+      if (err instanceof Error && (err.name === "TimeoutError" || err.message?.includes("timed out"))) {
+        console.warn(`Ubus call timed out after ${timeoutMs}ms for ${object}.${method}`);
+        throw new Error(`Ubus call to ${object}.${method} timed out after ${timeoutMs}ms`);
+      }
       console.warn(`Live ubus call failed for ${object}.${method}:`, err);
       throw err;
     }
   }
 
-  public async login(username = "root", password = ""): Promise<string> {
-    const payload: UbusRpcRequest = {
-      jsonrpc: "2.0",
-      id: this.reqId++,
-      method: "call",
-      params: ["00000000000000000000000000000000", "session", "login", { username, password, timeout: 86400 }],
-    };
-
-    const res = await fetch(this.endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    const json = await res.json();
-    if (json.result && json.result[0] === 0 && json.result[1]?.ubus_rpc_session) {
-      this.sessionId = json.result[1].ubus_rpc_session;
-      if (typeof window !== "undefined") {
-        localStorage.setItem("openwrt_session_id", this.sessionId);
-      }
-      return this.sessionId;
+  public async login(username = "root", password = "", timeoutMs = 15000): Promise<string> {
+    if (this.loginPromise) {
+      return this.loginPromise;
     }
 
-    throw new Error("Invalid username or password");
+    this.loginPromise = (async () => {
+      try {
+        const payload: UbusRpcRequest = {
+          jsonrpc: "2.0",
+          id: this.reqId++,
+          method: "call",
+          params: ["00000000000000000000000000000000", "session", "login", { username, password, timeout: 86400 }],
+        };
+
+        const res = await fetch(this.endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+
+        if (!res.ok) {
+          throw new Error(`HTTP login error ${res.status}: ${res.statusText}`);
+        }
+
+        const json = await res.json();
+        if (json.result && json.result[0] === 0 && json.result[1]?.ubus_rpc_session) {
+          this.sessionId = json.result[1].ubus_rpc_session;
+          this.authExpiredDispatched = false;
+          if (typeof window !== "undefined") {
+            localStorage.setItem("openwrt_session_id", this.sessionId);
+          }
+          return this.sessionId;
+        }
+
+        throw new Error("Invalid username or password");
+      } finally {
+        this.loginPromise = null;
+      }
+    })();
+
+    return this.loginPromise;
   }
 
   public logout() {
@@ -152,6 +208,10 @@ class UbusClient {
   // Common high-level API methods
   public async getBoard(): Promise<SystemBoard> {
     return this.call<SystemBoard>("system", "board");
+  }
+
+  public async getSystemBoard(): Promise<SystemBoard> {
+    return this.getBoard();
   }
 
   public async getSystemInfo(): Promise<SystemInfo> {
@@ -555,7 +615,7 @@ class UbusClient {
   }> {
     return this.call<any>("circumvention", "sub_decrypt_fetch", {
       url,
-      api_key: apiKey || "hd_889c9cc025a10885f358d1caefce6108",
+      api_key: apiKey || "",
       hwid: true,
     });
   }
@@ -649,9 +709,12 @@ class UbusClient {
   }
 
   public async confirmRollback(token?: string): Promise<{ status: string }> {
-    return this.call<{ status: string }>("circumvention", "confirm_rollback", {
+    const res = await this.call<{ status: string }>("circumvention", "confirm_rollback", {
       token: token || "",
     });
+    // Also confirm native OpenWrt UCI rollback session if armed
+    await this.call("uci", "confirm", {}).catch(() => {});
+    return res;
   }
 
   public async cancelRollback(): Promise<{ status: string }> {

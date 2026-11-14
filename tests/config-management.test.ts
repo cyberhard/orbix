@@ -153,4 +153,67 @@ describe("Configuration Management & Schema", () => {
     expect(report.proposedLanIp).toBe("192.168.2.1");
     expect(report.items.some((i) => i.key === "lan_ip_conflict")).toBe(true);
   });
+
+  it("should encrypt and decrypt payload using AES-256-GCM with PBKDF2 100k iterations", async () => {
+    const sensitivePayload = JSON.stringify({
+      root_password: "SuperSecretPassword123!",
+      wifi_key: "WPA3SecureKey99",
+      vless_uuid: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    });
+    const password = "ValidMasterPassword2026";
+
+    const { ciphertext, cryptoMetadata } = await BackupCrypto.encrypt(sensitivePayload, password);
+
+    expect(cryptoMetadata.algorithm).toBe("AES-GCM");
+    expect(cryptoMetadata.kdf).toBe("PBKDF2");
+    expect(cryptoMetadata.iterations).toBe(100000);
+    // Salt should be 16 bytes hex-encoded (32 chars)
+    expect(cryptoMetadata.salt.length).toBe(32);
+    expect(/^[0-9a-f]+$/i.test(cryptoMetadata.salt)).toBe(true);
+    // IV should be 12 bytes hex-encoded (24 chars)
+    expect(cryptoMetadata.iv.length).toBe(24);
+    expect(/^[0-9a-f]+$/i.test(cryptoMetadata.iv)).toBe(true);
+
+    const decrypted = await BackupCrypto.decrypt(ciphertext, password, cryptoMetadata);
+    expect(decrypted).toBe(sensitivePayload);
+  });
+
+  it("should strictly reject tampered ciphertext via AES-GCM authentication tag verification", async () => {
+    const payload = JSON.stringify({ target: "direct", domains: ["example.com"] });
+    const password = "MasterKey2026!";
+
+    const { ciphertext, cryptoMetadata } = await BackupCrypto.encrypt(payload, password);
+
+    // Tamper with ciphertext by corrupting bytes
+    const binary = atob(ciphertext);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    // Flip a bit in the ciphertext / auth tag
+    bytes[5] ^= 0xff;
+
+    let tamperedBinary = "";
+    for (let i = 0; i < bytes.length; i++) {
+      tamperedBinary += String.fromCharCode(bytes[i]);
+    }
+    const tamperedBase64 = btoa(tamperedBinary);
+
+    // Attempting to decrypt tampered data MUST throw authentication tag mismatch error
+    await expect(BackupCrypto.decrypt(tamperedBase64, password, cryptoMetadata)).rejects.toThrow(
+      /auth tag mismatch|Аутентификационный тег|целостност/i
+    );
+  });
+
+  it("should reject decryption with incorrect password", async () => {
+    const payload = JSON.stringify({ secret: "classified" });
+    const correctPassword = "CorrectPassword123";
+    const wrongPassword = "WrongPassword999";
+
+    const { ciphertext, cryptoMetadata } = await BackupCrypto.encrypt(payload, correctPassword);
+
+    await expect(BackupCrypto.decrypt(ciphertext, wrongPassword, cryptoMetadata)).rejects.toThrow(
+      /auth tag mismatch|Неверный пароль|целостност/i
+    );
+  });
 });

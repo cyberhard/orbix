@@ -18,7 +18,7 @@ export const LoginView: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-background via-card to-background relative">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-background relative">
       <div className="absolute top-4 right-4">
         <Button
           variant="outline"

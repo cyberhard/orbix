@@ -30,6 +30,7 @@ import {
   LifeBuoy,
 } from "lucide-react";
 import { useI18nStore } from "@/store/i18n-store";
+import { usePolicyStore } from "@/store/policy-store";
 
 export interface DeviceEntry {
   id: string;
@@ -180,6 +181,9 @@ export const HardwareCatalog: React.FC = () => {
   const { lang } = useI18nStore();
   const isRu = lang === "ru";
 
+  const { operatingMode } = usePolicyStore();
+  const isSimple = operatingMode === "simple";
+
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBrand, setSelectedBrand] = useState("all");
   const [selectedDevice, setSelectedDevice] = useState<DeviceEntry | null>(null);
@@ -228,6 +232,23 @@ export const HardwareCatalog: React.FC = () => {
 
         {/* Tab 1: Hardware Catalog */}
         <TabsContent value="catalog" className="space-y-6 mt-4">
+          {/* Top Recommendation Banner for Simple Mode */}
+          {isSimple && (
+            <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/40 flex items-start gap-3">
+              <Sparkles className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
+              <div className="space-y-1 text-xs">
+                <div className="font-semibold text-zinc-200">
+                  {isRu ? "Рекомендуемые роутеры с аппаратным ускорением Wi-Fi 6" : "Recommended Hardware for Peak Performance"}
+                </div>
+                <p className="text-zinc-400 leading-relaxed">
+                  {isRu
+                    ? "Для максимальной скорости и стабильной работы без зависаний мы рекомендуем роутеры на платформе MediaTek Filogic: Netcraze NC-1812 (1 ГБ ОЗУ), Cudy WR3000 и GL.iNet MT3000. Они обеспечивают 1 Гбит/с через VPN и аппаратное ускорение NAT."
+                    : "For best performance and full gigabit VPN speeds, we recommend MediaTek Filogic devices: Netcraze NC-1812, Cudy WR3000, and GL.iNet MT3000."}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Search & Filters */}
           <div className="flex flex-col sm:flex-row items-center gap-3 bg-zinc-950 p-3 rounded-xl border border-zinc-800">
             <div className="relative flex-1 w-full">
@@ -288,20 +309,37 @@ export const HardwareCatalog: React.FC = () => {
                   </div>
                 </CardHeader>
                 <CardContent className="pt-3 pb-4 space-y-2.5 text-xs flex-1 flex flex-col justify-between">
-                  <div className="space-y-1.5 font-mono text-[11px] text-zinc-400">
-                    <div className="flex justify-between">
-                      <span className="text-zinc-500">Target:</span>
-                      <span className="text-zinc-300">{dev.target}</span>
+                  {isSimple ? (
+                    <div className="space-y-1.5 text-[11px] text-zinc-400">
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500">{isRu ? "Память:" : "Memory:"}</span>
+                        <span className="text-zinc-200 font-semibold">{dev.ramMb} MB RAM</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500">Wi-Fi:</span>
+                        <span className="text-emerald-400 truncate max-w-[170px]">{dev.wifi}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500">{isRu ? "Скорость VPN:" : "VPN Speed:"}</span>
+                        <span className="text-zinc-300 font-medium">{dev.ramMb >= 512 ? "До 1000 Мбит/с" : "До 450 Мбит/с"}</span>
+                      </div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-zinc-500">RAM / Flash:</span>
-                      <span className="text-zinc-300">{dev.ramMb} MB / {dev.flashMb} MB</span>
+                  ) : (
+                    <div className="space-y-1.5 font-mono text-[11px] text-zinc-400">
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500">Target:</span>
+                        <span className="text-zinc-300">{dev.target}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500">RAM / Flash:</span>
+                        <span className="text-zinc-300">{dev.ramMb} MB / {dev.flashMb} MB</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500">Wi-Fi:</span>
+                        <span className="text-cyan-400 truncate max-w-[170px]">{dev.wifi}</span>
+                      </div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-zinc-500">Wi-Fi:</span>
-                      <span className="text-cyan-400 truncate max-w-[170px]">{dev.wifi}</span>
-                    </div>
-                  </div>
+                  )}
 
                   {dev.notesRu && (
                     <p className="text-[11px] text-zinc-400 bg-zinc-900/40 p-2 rounded border border-zinc-800/80 mt-2">

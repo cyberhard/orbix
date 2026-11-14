@@ -22,6 +22,38 @@ A universal, high-performance network management platform for **OpenWrt routers*
 
 ---
 
+## Why ORBIX? Comparison vs. Traditional OpenWrt LuCI
+
+| Capability | Standard OpenWrt LuCI | ORBIX OpenWrt Panel |
+| :--- | :--- | :--- |
+| **Frontend Architecture** | Legacy Server-Side Lua / CGI scripts (full page reloads) | **Modern SPA (React 19 + TypeScript + Vite 8 + Tailwind CSS)** |
+| **Design System** | Fragmented HTML tables, inconsistent 2000s themes | **Strict Industrial shadcn/ui Zinc**, light/dark mode, 60 FPS transitions |
+| **Topology & Map** | None (only flat ARP/DHCP IP text lists) | **Interactive Cisco-style SVG Canvas** with live cable routing & node inspection |
+| **Modes of Operation** | Expert-only (exposes raw Linux network internals to everyone) | **Persistent Simple Mode** (1-Click intent presets) + **Granular Expert Mode** |
+| **DPI & Anti-Throttling** | Manual shell installation of Zapret/nfqws via opkg & CLI | **Built-in Zapret2 ALT11** (`fake+disorder`) for YouTube 4K & Discord voice |
+| **Next-Gen VPN Protocols** | Basic WireGuard / OpenVPN via standard luci-proto | **Sing-box VLESS Reality** (XTLS-Vision) & **AmneziaWG** ($J_c/J_{min}/H_1-H_4$) |
+| **Lockout Protection** | High risk of locking oneself out when editing network interfaces | **Zero-Lockout 75s Watchdog** auto-reverting changes if link drops |
+| **Config Backups** | Raw opaque `.tar.gz` archive containing full `/etc` | **Versioned JSON** with **Web Crypto AES-256-GCM** + cross-hardware interface adaptation |
+| **Resource Footprint** | Lua interpreter overhead in RAM during page render | **Zero router-side runtime**: static bundle (~125 KB gz) executed in browser |
+
+---
+
+## Hardware Compatibility Highlights
+
+ORBIX is tested and optimized for modern OpenWrt targets with special focus on hardware NAT acceleration and low power draw:
+
+- **MediaTek Filogic 820 / 830 (MT7981 / MT7986):**
+  - **Netcraze NC-1812** *(Reference Device: 1 GB RAM, Wi-Fi 6, Gigabit Wire-Speed VPN)*
+  - **Cudy WR3000** *(Best value Wi-Fi 6 router, MT7981B)*
+  - **Xiaomi AX3000T** *(Popular budget Wi-Fi 6 power-house)*
+  - **GL.iNet Beryl AX (GL-MT3000)** *(Portable travel router with dual 2.5G/1G ports)*
+- **x86_64 Soft Routers & Mini-PCs:**
+  - Intel N100, N5105, J4125 with multi-port 2.5 GbE Intel i225/i226 NICs.
+- **Qualcomm Atheros IPQ40xx / IPQ807x:**
+  - Extensive support across dual-band and tri-band enterprise access points.
+
+---
+
 ## Quick One-Line Installation
 
 Connect to your OpenWrt router via SSH and run:

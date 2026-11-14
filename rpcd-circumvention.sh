@@ -13,6 +13,109 @@ return_error() {
 	exit 0
 }
 
+# Helper: clean up active watchdog and child processes deterministically
+kill_active_watchdog() {
+	if [ -f "/tmp/uci_watchdog.sleep_pid" ]; then
+		_sleep_pid=$(cat /tmp/uci_watchdog.sleep_pid 2>/dev/null | tr -d ' \r\n')
+		if [ -n "$_sleep_pid" ] && [ "$_sleep_pid" -gt 1 ] 2>/dev/null; then
+			kill -9 "$_sleep_pid" 2>/dev/null
+		fi
+		rm -f /tmp/uci_watchdog.sleep_pid
+	fi
+
+	if [ -f "/tmp/uci_watchdog.pid" ]; then
+		_wd_pid=$(cat /tmp/uci_watchdog.pid 2>/dev/null | tr -d ' \r\n')
+		if [ -n "$_wd_pid" ] && [ "$_wd_pid" -gt 1 ] 2>/dev/null; then
+			kill -TERM "$_wd_pid" 2>/dev/null
+			if command -v pgrep >/dev/null 2>&1; then
+				_children=$(pgrep -P "$_wd_pid" 2>/dev/null)
+				[ -n "$_children" ] && kill -9 $_children 2>/dev/null
+			fi
+			kill -9 "$_wd_pid" 2>/dev/null
+		fi
+		rm -f /tmp/uci_watchdog.pid
+	fi
+}
+
+# Helper: dynamically resolve LAN subnet in CIDR notation (POSIX sh arithmetic)
+get_lan_subnet() {
+	_ip=""
+	_mask=""
+	if command -v ubus >/dev/null 2>&1; then
+		_ip=$(ubus call network.interface.lan status 2>/dev/null | jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
+		_mask=$(ubus call network.interface.lan status 2>/dev/null | jsonfilter -e '@["ipv4-address"][0].mask' 2>/dev/null)
+	fi
+
+	if [ -z "$_ip" ]; then
+		_ip=$(uci -q get network.lan.ipaddr)
+		_mask=$(uci -q get network.lan.netmask)
+	fi
+
+	[ -z "$_ip" ] && _ip="192.168.1.1"
+	[ -z "$_mask" ] && _mask="24"
+
+	_cidr=24
+	if echo "$_ip" | grep -q "/"; then
+		_cidr="${_ip##*/}"
+		_ip="${_ip%%/*}"
+	elif [ -n "$_mask" ]; then
+		case "$_mask" in
+			255.255.255.255|32) _cidr=32 ;;
+			255.255.255.254|31) _cidr=31 ;;
+			255.255.255.252|30) _cidr=30 ;;
+			255.255.255.248|29) _cidr=29 ;;
+			255.255.255.240|28) _cidr=28 ;;
+			255.255.255.224|27) _cidr=27 ;;
+			255.255.255.192|26) _cidr=26 ;;
+			255.255.255.128|25) _cidr=25 ;;
+			255.255.255.0|24)   _cidr=24 ;;
+			255.255.254.0|23)   _cidr=23 ;;
+			255.255.252.0|22)   _cidr=22 ;;
+			255.255.248.0|21)   _cidr=21 ;;
+			255.255.240.0|20)   _cidr=20 ;;
+			255.255.0.0|16)     _cidr=16 ;;
+			255.0.0.0|8)        _cidr=8 ;;
+			*) _cidr=24 ;;
+		esac
+	fi
+
+	_mask_num=$(( (0xFFFFFFFF << (32 - _cidr)) & 0xFFFFFFFF ))
+	_m1=$(( (_mask_num >> 24) & 0xFF ))
+	_m2=$(( (_mask_num >> 16) & 0xFF ))
+	_m3=$(( (_mask_num >> 8) & 0xFF ))
+	_m4=$(( _mask_num & 0xFF ))
+
+	_o1=$(echo "$_ip" | cut -d. -f1)
+	_o2=$(echo "$_ip" | cut -d. -f2)
+	_o3=$(echo "$_ip" | cut -d. -f3)
+	_o4=$(echo "$_ip" | cut -d. -f4)
+
+	_n1=$(( (_o1 & _m1) ))
+	_n2=$(( (_o2 & _m2) ))
+	_n3=$(( (_o3 & _m3) ))
+	_n4=$(( (_o4 & _m4) ))
+
+	echo "${_n1}.${_n2}.${_n3}.${_n4}/${_cidr}"
+}
+
+# Helper: dynamically detect WAN interface names
+get_wan_interfaces() {
+	_wan_list="wan eth0"
+	_w_dev=$(uci -q get network.wan.device)
+	[ -n "$_w_dev" ] && _wan_list="$_wan_list $_w_dev"
+	_w_if=$(uci -q get network.wan.ifname)
+	[ -n "$_w_if" ] && _wan_list="$_wan_list $_w_if"
+
+	_uniq_wan=""
+	for _w in $_wan_list; do
+		case " $_uniq_wan " in
+			*" $_w "*) ;;
+			*) _uniq_wan="${_uniq_wan:+$_uniq_wan, }\"$_w\"" ;;
+		esac
+	done
+	echo "$_uniq_wan"
+}
+
 format_json_array() {
 	_first=1
 	printf "["
@@ -362,15 +465,21 @@ case "$1" in
 	;;
 
 	call)
+		if [ -t 0 ]; then
+			input=""
+		else
+			input=$(cat)
+		fi
+
 		case "$2" in
 			awg_status)
 				AWG_CONF="/etc/wireguard/awg0.conf"
 				UCI_EXISTS=$(uci -q get network.awg0)
 
 				WG_BIN=""
-				if which awg >/dev/null 2>&1; then
+				if command -v awg >/dev/null 2>&1; then
 					WG_BIN="awg"
-				elif which wg >/dev/null 2>&1; then
+				elif command -v wg >/dev/null 2>&1; then
 					WG_BIN="wg"
 				fi
 
@@ -471,7 +580,12 @@ case "$1" in
 					PEER_PUB=$(uci -q get network.peer_awg0.public_key)
 					P_HOST=$(uci -q get network.peer_awg0.endpoint_host)
 					P_PORT=$(uci -q get network.peer_awg0.endpoint_port || echo 51820)
-					[ -n "$P_HOST" ] && PEER_EP="$P_HOST:$P_PORT"
+					if [ -n "$P_HOST" ]; then
+						case "$P_HOST" in
+							*:*) PEER_EP="[${P_HOST}]:${P_PORT}" ;;
+							*)   PEER_EP="${P_HOST}:${P_PORT}" ;;
+						esac
+					fi
 					VAL=$(uci -q get network.peer_awg0.allowed_ips)
 					[ -n "$VAL" ] && ALLOWED="$VAL"
 					VAL=$(uci -q get network.peer_awg0.persistent_keepalive)
@@ -550,9 +664,9 @@ case "$1" in
 
 			awg_genkey)
 				WG_BIN=""
-				if which awg >/dev/null 2>&1; then
+				if command -v awg >/dev/null 2>&1; then
 					WG_BIN="awg"
-				elif which wg >/dev/null 2>&1; then
+				elif command -v wg >/dev/null 2>&1; then
 					WG_BIN="wg"
 				fi
 
@@ -578,9 +692,8 @@ case "$1" in
 			;;
 
 			awg_import_conf)
-				read input
-				CONF=$(echo "$input" | jsonfilter -e '@.conf' 2>/dev/null)
-				APPLY=$(echo "$input" | jsonfilter -e '@.apply' 2>/dev/null)
+				CONF=$(printf "%s\n" "$input" | jsonfilter -e '@.conf' 2>/dev/null)
+				APPLY=$(printf "%s\n" "$input" | jsonfilter -e '@.apply' 2>/dev/null)
 				if [ -z "$APPLY" ]; then APPLY="true"; fi
 
 				if [ -z "$CONF" ]; then
@@ -616,8 +729,30 @@ case "$1" in
 				[ -z "$ALLOWED" ] && ALLOWED="0.0.0.0/0"
 				[ -z "$KEEPALIVE" ] && KEEPALIVE="25"
 
-				PEER_HOST=$(echo "$ENDPOINT" | cut -d':' -f1)
-				PEER_PORT=$(echo "$ENDPOINT" | cut -d':' -f2)
+				case "$ENDPOINT" in
+					\[*\]:*)
+						PEER_HOST="${ENDPOINT%%\]*}"
+						PEER_HOST="${PEER_HOST#\[}"
+						PEER_PORT="${ENDPOINT##*:}"
+						;;
+					\[*\])
+						PEER_HOST="${ENDPOINT#\[}"
+						PEER_HOST="${PEER_HOST%\]}"
+						PEER_PORT=""
+						;;
+					*:*:*)
+						PEER_HOST="$ENDPOINT"
+						PEER_PORT=""
+						;;
+					*:*)
+						PEER_HOST="${ENDPOINT%:*}"
+						PEER_PORT="${ENDPOINT##*:}"
+						;;
+					*)
+						PEER_HOST="$ENDPOINT"
+						PEER_PORT=""
+						;;
+				esac
 				[ -z "$PEER_PORT" ] && PEER_PORT=51820
 
 				uci -q delete network.awg0
@@ -686,7 +821,7 @@ case "$1" in
 
 			zapret_status)
 				RUNNING=0
-				pgrep nfqws >/dev/null 2>&1 && RUNNING=1
+				(pidof nfqws || pgrep nfqws) >/dev/null 2>&1 && RUNNING=1
 
 				ENABLED=0
 				VAL=$(uci -q get zapret.main.NFQWS_ENABLE || uci -q get zapret.main.run_on_boot)
@@ -783,9 +918,8 @@ case "$1" in
 			;;
 
 			zapret_test_strategy)
-				read input
-				RAW_TARGET=$(echo "$input" | jsonfilter -e '@.domain' 2>/dev/null | tr -d ' \t\r\n')
-				STRATEGY=$(echo "$input" | jsonfilter -e '@.strategy' 2>/dev/null | tr -d ' \t\r\n')
+				RAW_TARGET=$(printf "%s\n" "$input" | jsonfilter -e '@.domain' 2>/dev/null | tr -d ' \t\r\n')
+				STRATEGY=$(printf "%s\n" "$input" | jsonfilter -e '@.strategy' 2>/dev/null | tr -d ' \t\r\n')
 				if [ -z "$RAW_TARGET" ]; then RAW_TARGET="youtube.com"; fi
 
 				# Strict input sanitization: valid FQDN or IPv4
@@ -833,7 +967,7 @@ case "$1" in
 
 			vless_status)
 				RUNNING=0
-				pgrep sing-box >/dev/null 2>&1 && RUNNING=1
+				(pidof sing-box || pgrep sing-box) >/dev/null 2>&1 && RUNNING=1
 
 				ACTIVE_CONF="/etc/sing-box/active_node.json"
 				MAIN_CONF="/etc/sing-box/config.json"
@@ -902,9 +1036,8 @@ case "$1" in
 			;;
 
 			singbox_test_node)
-				read input
-				RAW_HOST=$(echo "$input" | jsonfilter -e '@.server' 2>/dev/null | tr -d ' \t\r\n')
-				RAW_PORT=$(echo "$input" | jsonfilter -e '@.port' 2>/dev/null | tr -d ' \t\r\n')
+				RAW_HOST=$(printf "%s\n" "$input" | jsonfilter -e '@.server' 2>/dev/null | tr -d ' \t\r\n')
+				RAW_PORT=$(printf "%s\n" "$input" | jsonfilter -e '@.port' 2>/dev/null | tr -d ' \t\r\n')
 
 				if [ -z "$RAW_HOST" ]; then
 					return_error "Server address parameter is required"
@@ -965,7 +1098,7 @@ case "$1" in
 				fi
 
 				RUNNING=0
-				pgrep podkop >/dev/null 2>&1 && RUNNING=1
+				(pidof podkop || pgrep podkop) >/dev/null 2>&1 && RUNNING=1
 
 				ENABLED=0
 				VAL=$(uci -q get podkop.main.enabled)
@@ -1045,8 +1178,7 @@ case "$1" in
 			;;
 
 			pbr_trace)
-				read input
-				RAW_TARGET=$(echo "$input" | jsonfilter -e '@.target' 2>/dev/null | tr -d ' \t\r\n')
+				RAW_TARGET=$(printf "%s\n" "$input" | jsonfilter -e '@.target' 2>/dev/null | tr -d ' \t\r\n')
 				if [ -z "$RAW_TARGET" ]; then
 					return_error "Target domain or IP parameter is required"
 				fi
@@ -1066,10 +1198,10 @@ case "$1" in
 					[0-9]*.[0-9]*.[0-9]*.[0-9]*) IP="$TARGET" ;;
 				esac
 
-				if [ -z "$IP" ] && which resolveip >/dev/null 2>&1; then
+				if [ -z "$IP" ] && command -v resolveip >/dev/null 2>&1; then
 					IP=$(resolveip -4 -t 3 "$TARGET" 2>/dev/null | head -n1)
 				fi
-				if [ -z "$IP" ] && which nslookup >/dev/null 2>&1; then
+				if [ -z "$IP" ] && command -v nslookup >/dev/null 2>&1; then
 					IP=$(nslookup "$TARGET" 2>/dev/null | awk '/^Address: / && !/:53/ {print $2; exit}')
 				fi
 
@@ -1128,8 +1260,7 @@ case "$1" in
 			;;
 
 			arm_rollback)
-				read input
-				RAW_TIMEOUT=$(echo "$input" | jsonfilter -e '@.timeout' 2>/dev/null | tr -d ' \t\r\n')
+				RAW_TIMEOUT=$(printf "%s\n" "$input" | jsonfilter -e '@.timeout' 2>/dev/null | tr -d ' \t\r\n')
 				TIMEOUT=75
 				case "$RAW_TIMEOUT" in
 					''|*[!0-9]*) TIMEOUT=75 ;;
@@ -1138,15 +1269,7 @@ case "$1" in
 				if [ "$TIMEOUT" -le 10 ]; then TIMEOUT=75; fi
 
 				# Clean up any existing armed watchdog process before starting a new one
-				if [ -f "/tmp/uci_watchdog.pid" ]; then
-					OLD_PID=$(cat /tmp/uci_watchdog.pid 2>/dev/null | tr -d ' \r\n')
-					if [ -n "$OLD_PID" ] && [ "$OLD_PID" -gt 1 ] 2>/dev/null; then
-						OLD_CHILDREN=$(pgrep -P "$OLD_PID" 2>/dev/null)
-						[ -n "$OLD_CHILDREN" ] && kill -9 $OLD_CHILDREN 2>/dev/null
-						kill -9 "$OLD_PID" 2>/dev/null
-					fi
-					rm -f /tmp/uci_watchdog.pid
-				fi
+				kill_active_watchdog
 
 				mkdir -p /tmp/uci_rollback_backup/config /tmp/uci_rollback_backup/sing-box
 				cp -rf /etc/config/* /tmp/uci_rollback_backup/config/ 2>/dev/null
@@ -1159,12 +1282,31 @@ case "$1" in
 #!/bin/sh
 TOKEN="$1"
 TIMEOUT="$2"
-sleep "$TIMEOUT"
+
+SLEEP_PID=""
+
+cleanup() {
+	trap - TERM INT HUP QUIT EXIT
+	if [ -n "$SLEEP_PID" ]; then
+		kill -9 "$SLEEP_PID" 2>/dev/null
+	fi
+	rm -f /tmp/uci_watchdog.pid /tmp/uci_watchdog.sleep_pid
+	exit 0
+}
+
+trap cleanup TERM INT HUP QUIT
+
+sleep "$TIMEOUT" &
+SLEEP_PID=$!
+echo "$SLEEP_PID" > /tmp/uci_watchdog.sleep_pid
+
+wait "$SLEEP_PID" 2>/dev/null
+
 if [ -f "/tmp/uci_rollback_token" ] && [ "$(cat /tmp/uci_rollback_token 2>/dev/null)" = "$TOKEN" ]; then
 	logger -t uci-watchdog "Rollback timer expired without user confirmation! Restoring safe configs..."
 	cp -rf /tmp/uci_rollback_backup/config/* /etc/config/ 2>/dev/null
 	cp -rf /tmp/uci_rollback_backup/sing-box/* /etc/sing-box/ 2>/dev/null
-	rm -rf /tmp/uci_rollback_backup /tmp/uci_rollback_token /tmp/uci_watchdog.pid
+	rm -rf /tmp/uci_rollback_backup /tmp/uci_rollback_token /tmp/uci_watchdog.pid /tmp/uci_watchdog.sleep_pid /tmp/uci_watchdog.sh
 	/etc/init.d/network reload 2>/dev/null
 	/etc/init.d/firewall reload 2>/dev/null
 	/etc/init.d/pbr reload 2>/dev/null
@@ -1172,7 +1314,8 @@ if [ -f "/tmp/uci_rollback_token" ] && [ "$(cat /tmp/uci_rollback_token 2>/dev/n
 	/etc/init.d/rpcd restart 2>/dev/null
 	logger -t uci-watchdog "Rollback restoration complete."
 fi
-rm -f /tmp/uci_watchdog.pid
+
+rm -f /tmp/uci_watchdog.pid /tmp/uci_watchdog.sleep_pid
 EOF_WD
 				chmod +x /tmp/uci_watchdog.sh
 				sh /tmp/uci_watchdog.sh "$TOKEN" "$TIMEOUT" >/dev/null 2>&1 &
@@ -1187,8 +1330,7 @@ EOF_WD
 			;;
 
 			confirm_rollback)
-				read input
-				USER_TOKEN=$(echo "$input" | jsonfilter -e '@.token' 2>/dev/null | tr -d ' \r\n\t')
+				USER_TOKEN=$(printf "%s\n" "$input" | jsonfilter -e '@.token' 2>/dev/null | tr -d ' \r\n\t')
 
 				if [ ! -f "/tmp/uci_rollback_token" ]; then
 					return_error "No active rollback session armed"
@@ -1200,15 +1342,7 @@ EOF_WD
 				fi
 
 				# Deterministically kill watchdog process and all children (e.g. sleep)
-				if [ -f "/tmp/uci_watchdog.pid" ]; then
-					WD_PID=$(cat /tmp/uci_watchdog.pid 2>/dev/null | tr -d ' \r\n')
-					if [ -n "$WD_PID" ] && [ "$WD_PID" -gt 1 ] 2>/dev/null; then
-						WD_CHILDREN=$(pgrep -P "$WD_PID" 2>/dev/null)
-						[ -n "$WD_CHILDREN" ] && kill -9 $WD_CHILDREN 2>/dev/null
-						kill -9 "$WD_PID" 2>/dev/null
-					fi
-					rm -f /tmp/uci_watchdog.pid
-				fi
+				kill_active_watchdog
 
 				rm -rf /tmp/uci_rollback_token /tmp/uci_rollback_backup
 				rm -f /tmp/uci_watchdog.sh
@@ -1221,15 +1355,7 @@ EOF_WD
 
 			cancel_rollback)
 				# Terminate watchdog immediately
-				if [ -f "/tmp/uci_watchdog.pid" ]; then
-					WD_PID=$(cat /tmp/uci_watchdog.pid 2>/dev/null | tr -d ' \r\n')
-					if [ -n "$WD_PID" ] && [ "$WD_PID" -gt 1 ] 2>/dev/null; then
-						WD_CHILDREN=$(pgrep -P "$WD_PID" 2>/dev/null)
-						[ -n "$WD_CHILDREN" ] && kill -9 $WD_CHILDREN 2>/dev/null
-						kill -9 "$WD_PID" 2>/dev/null
-					fi
-					rm -f /tmp/uci_watchdog.pid
-				fi
+				kill_active_watchdog
 
 				if [ -d "/tmp/uci_rollback_backup" ]; then
 					cp -rf /tmp/uci_rollback_backup/config/* /etc/config/ 2>/dev/null
@@ -1249,9 +1375,8 @@ EOF_WD
 			;;
 
 			sub_decrypt_fetch)
-				read input
-				RAW_URL=$(echo "$input" | jsonfilter -e '@.url' 2>/dev/null | tr -d '\r\n\t ')
-				RAW_KEY=$(echo "$input" | jsonfilter -e '@.api_key' 2>/dev/null | tr -d '\r\n\t ')
+				RAW_URL=$(printf "%s\n" "$input" | jsonfilter -e '@.url' 2>/dev/null | tr -d '\r\n\t ')
+				RAW_KEY=$(printf "%s\n" "$input" | jsonfilter -e '@.api_key' 2>/dev/null | tr -d '\r\n\t ')
 
 				if [ -z "$RAW_URL" ]; then
 					return_error "Subscription URL parameter is required"
@@ -1309,12 +1434,11 @@ EOF_WD
 			;;
 
 			pbr_set_device_rule)
-				read input
-				RAW_IP=$(echo "$input" | jsonfilter -e '@.ip' 2>/dev/null | tr -d ' \t\r\n')
-				RAW_MAC=$(echo "$input" | jsonfilter -e '@.mac' 2>/dev/null | tr -d ' \t\r\n')
-				RAW_NAME=$(echo "$input" | jsonfilter -e '@.name' 2>/dev/null)
-				RAW_IFACE=$(echo "$input" | jsonfilter -e '@.interface' 2>/dev/null | tr -d ' \t\r\n')
-				DEV_ENABLED=$(echo "$input" | jsonfilter -e '@.enabled' 2>/dev/null | tr -d ' \t\r\n')
+				RAW_IP=$(printf "%s\n" "$input" | jsonfilter -e '@.ip' 2>/dev/null | tr -d ' \t\r\n')
+				RAW_MAC=$(printf "%s\n" "$input" | jsonfilter -e '@.mac' 2>/dev/null | tr -d ' \t\r\n')
+				RAW_NAME=$(printf "%s\n" "$input" | jsonfilter -e '@.name' 2>/dev/null)
+				RAW_IFACE=$(printf "%s\n" "$input" | jsonfilter -e '@.interface' 2>/dev/null | tr -d ' \t\r\n')
+				DEV_ENABLED=$(printf "%s\n" "$input" | jsonfilter -e '@.enabled' 2>/dev/null | tr -d ' \t\r\n')
 
 				# Validate IPv4 format
 				DEV_IP=$(printf "%s" "$RAW_IP" | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' || true)
@@ -1376,18 +1500,17 @@ EOF_WD
 			;;
 
 			singbox_set_outbound)
-				read input
 				# Save active node configuration in /etc/sing-box/active_node.json
 				printf "%s\n" "$input" > /etc/sing-box/active_node.json 2>/dev/null
 
-				RAW_SERVER=$(echo "$input" | jsonfilter -e '@.server' -e '@.node.server' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
-				RAW_PORT=$(echo "$input" | jsonfilter -e '@.port' -e '@.node.port' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
-				RAW_UUID=$(echo "$input" | jsonfilter -e '@.uuid' -e '@.node.uuid' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
-				RAW_FLOW=$(echo "$input" | jsonfilter -e '@.flow' -e '@.node.flow' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
-				RAW_SNI=$(echo "$input" | jsonfilter -e '@.sni' -e '@.node.sni' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
-				RAW_PUBKEY=$(echo "$input" | jsonfilter -e '@.publicKey' -e '@.node.publicKey' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
-				RAW_SHORTID=$(echo "$input" | jsonfilter -e '@.shortId' -e '@.node.shortId' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
-				RAW_FP=$(echo "$input" | jsonfilter -e '@.fingerprint' -e '@.node.fingerprint' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
+				RAW_SERVER=$(printf "%s\n" "$input" | jsonfilter -e '@.server' -e '@.node.server' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
+				RAW_PORT=$(printf "%s\n" "$input" | jsonfilter -e '@.port' -e '@.node.port' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
+				RAW_UUID=$(printf "%s\n" "$input" | jsonfilter -e '@.uuid' -e '@.node.uuid' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
+				RAW_FLOW=$(printf "%s\n" "$input" | jsonfilter -e '@.flow' -e '@.node.flow' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
+				RAW_SNI=$(printf "%s\n" "$input" | jsonfilter -e '@.sni' -e '@.node.sni' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
+				RAW_PUBKEY=$(printf "%s\n" "$input" | jsonfilter -e '@.publicKey' -e '@.node.publicKey' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
+				RAW_SHORTID=$(printf "%s\n" "$input" | jsonfilter -e '@.shortId' -e '@.node.shortId' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
+				RAW_FP=$(printf "%s\n" "$input" | jsonfilter -e '@.fingerprint' -e '@.node.fingerprint' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
 
 				# Sanitize fields against configuration injection
 				SERVER=$(printf "%s" "$RAW_SERVER" | grep -E '^([a-zA-Z0-9.-]+)$' || true)
@@ -1424,25 +1547,40 @@ EOF_WD
 			;;
 
 			killswitch_set)
-				read -r input
-				KS_ENABLED=$(echo "$input" | jsonfilter -e '@.enabled' 2>/dev/null)
-				KS_SCOPE=$(echo "$input" | jsonfilter -e '@.scope' 2>/dev/null)
+				KS_ENABLED=$(printf "%s\n" "$input" | jsonfilter -e '@.enabled' 2>/dev/null)
+				KS_SCOPE=$(printf "%s\n" "$input" | jsonfilter -e '@.scope' 2>/dev/null)
 				[ -z "$KS_SCOPE" ] && KS_SCOPE="vpn_devices"
 
 				mkdir -p /etc/orbix /tmp/hosts /tmp/dnsmasq.d
 
 				if [ "$KS_ENABLED" = "1" ] || [ "$KS_ENABLED" = "true" ]; then
 					echo "{\"enabled\":true,\"scope\":\"$KS_SCOPE\",\"allow_lan\":true,\"updated_at\":$(date +%s)}" > /etc/orbix/killswitch.json
+					LAN_SUBNET=$(get_lan_subnet)
+					WAN_IFACES=$(get_wan_interfaces)
+
 					nft add table inet orbix_protection 2>/dev/null
 					nft 'add chain inet orbix_protection forward { type filter hook forward priority -5; policy accept; }' 2>/dev/null
 					nft flush chain inet orbix_protection forward 2>/dev/null
-					nft add rule inet orbix_protection forward ip daddr 192.168.1.0/24 accept 2>/dev/null
-					nft add rule inet orbix_protection forward ip saddr 192.168.1.0/24 ip daddr 192.168.1.0/24 accept 2>/dev/null
+					nft add rule inet orbix_protection forward ip daddr "$LAN_SUBNET" accept 2>/dev/null
+					nft add rule inet orbix_protection forward ip saddr "$LAN_SUBNET" ip daddr "$LAN_SUBNET" accept 2>/dev/null
 					nft add rule inet orbix_protection forward ct state established,related accept 2>/dev/null
-					nft 'add rule inet orbix_protection forward oifname { "tun0", "awg0" } accept' 2>/dev/null
+					nft 'add rule inet orbix_protection forward oifname { "singbox", "tun0", "awg0", "wg0" } accept' 2>/dev/null
 
 					if [ "$KS_SCOPE" = "all" ]; then
-						nft 'add rule inet orbix_protection forward ip saddr 192.168.1.0/24 oifname { "wan", "eth0" } counter drop' 2>/dev/null
+						nft "add rule inet orbix_protection forward ip saddr $LAN_SUBNET oifname { $WAN_IFACES } counter drop" 2>/dev/null
+					else
+						for SEC in $(uci -q show pbr | grep '=policy' | cut -d'=' -f1); do
+							EN=$(uci -q get "${SEC}.enabled")
+							IFACE=$(uci -q get "${SEC}.interface")
+							SRC=$(uci -q get "${SEC}.src_addr")
+							if [ "$EN" = "1" ] && [ -n "$SRC" ]; then
+								case "$IFACE" in
+									singbox*|awg*|tun*|wg*)
+										nft "add rule inet orbix_protection forward ip saddr $SRC oifname { $WAN_IFACES } counter drop" 2>/dev/null
+									;;
+								esac
+							fi
+						done
 					fi
 				else
 					echo "{\"enabled\":false,\"scope\":\"$KS_SCOPE\",\"allow_lan\":true,\"updated_at\":$(date +%s)}" > /etc/orbix/killswitch.json
@@ -1490,9 +1628,8 @@ EOF_WD
 			;;
 
 			sub_save_cache)
-				read -r input
 				mkdir -p /etc/orbix
-				echo "$input" | jsonfilter -e '@.data' 2>/dev/null > /etc/orbix/subscriptions.json
+				printf "%s\n" "$input" | jsonfilter -e '@.data' 2>/dev/null > /etc/orbix/subscriptions.json
 				json_init
 				json_add_string "status" "ok"
 				json_dump
@@ -1510,9 +1647,8 @@ EOF_WD
 			;;
 
 			policy_apply)
-				read -r input
 				mkdir -p /etc/orbix
-				echo "$input" > /etc/orbix/policies.json
+				printf "%s\n" "$input" > /etc/orbix/policies.json
 
 				# Clean up any legacy sinkhole or hosts files
 				rm -f /tmp/hosts/orbix_policy_blocks /tmp/dnsmasq.d/orbix_policy_blocks.conf

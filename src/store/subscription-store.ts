@@ -71,9 +71,9 @@ interface SubscriptionState {
 export const useSubscriptionStore = create<SubscriptionState>()(
   persist(
     (set, get) => ({
-      url: "https://sub.conn-liberty.net/connection/subs/3ac0ef29-b342-4332-b3a9-e4f16af2fe68",
-      decryptedUrl: "https://sub.conn-liberty.net/connection/subs/3ac0ef29-b342-4332-b3a9-e4f16af2fe68",
-      apiKey: "hd_889c9cc025a10885f358d1caefce6108",
+      url: "",
+      decryptedUrl: "",
+      apiKey: "",
       metadata: DEFAULT_METADATA,
       nodes: [],
       activeNodeId: "",

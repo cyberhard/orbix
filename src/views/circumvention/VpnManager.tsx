@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ubusClient } from "@/lib/ubus-client";
 import { useI18nStore } from "@/store/i18n-store";
 import { useSubscriptionStore } from "@/store/subscription-store";
+import { usePolicyStore } from "@/store/policy-store";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ import {
   Lock,
   Activity,
   ArrowRight,
+  Sparkles,
 } from "lucide-react";
 import { formatBytes } from "@/lib/utils";
 import { VlessNode } from "@/types/ubus";
@@ -416,6 +418,11 @@ export const VpnManager: React.FC = () => {
     showToast(isRu ? "Ключи сгенерированы и скопированы в буфер обмена!" : "Keypair generated and copied to clipboard!");
   };
 
+  const { operatingMode } = usePolicyStore();
+  const isSimple = operatingMode === "simple";
+  const activeVless = nodes.find((n) => n.active);
+  const isAnyVpnActive = isTunnelUp || Boolean(activeVless);
+
   const peer = awgData?.peers?.[0];
   const latestHandshakeSec = peer?.latest_handshake && peer.latest_handshake > 0
     ? Math.max(0, Math.floor(Date.now() / 1000 - peer.latest_handshake))
@@ -451,7 +458,162 @@ export const VpnManager: React.FC = () => {
         </div>
       )}
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+      {/* Simple Mode vs Expert Mode Layout */}
+      {isSimple ? (
+        <div className="space-y-6">
+          <div className="p-4 rounded-xl border border-border bg-muted/20 flex items-start gap-3">
+            <Sparkles className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
+            <div className="space-y-1 text-xs">
+              <div className="font-semibold text-foreground">
+                {isRu ? "Простой режим VPN" : "Simple VPN Mode"}
+              </div>
+              <p className="text-muted-foreground leading-relaxed">
+                {isRu
+                  ? "ORBIX разделяет трафик автоматически: тяжелые сайты YouTube и Discord ускоряются через Zapret без расхода трафика VPN, банки работают напрямую, а заблокированные сервисы идут через защищенный туннель."
+                  : "Traffic is intelligently routed: YouTube/Discord use Zapret acceleration without consuming VPN bandwidth, local services route direct, and restricted domains route through the VPN."}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Active VPN Tunnel Card */}
+            <Card className="border-border bg-card text-card-foreground shadow-sm">
+              <CardHeader className="pb-3 border-b border-border">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <Shield className={`h-4 w-4 ${isAnyVpnActive ? "text-emerald-400" : "text-muted-foreground"}`} />
+                      <span>{isRu ? "Защищенный VPN туннель" : "Secure VPN Tunnel"}</span>
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      {isTunnelUp ? "AmneziaWG (awg0)" : activeVless ? `Sing-box VLESS (${activeVless.name})` : isRu ? "Туннель выключен" : "Tunnel Inactive"}
+                    </CardDescription>
+                  </div>
+                  <Badge variant={isAnyVpnActive ? "default" : "outline"} className="text-[10px]">
+                    {isAnyVpnActive ? (isRu ? "В сети" : "Connected") : (isRu ? "Отключен" : "Disconnected")}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4 space-y-4 text-xs">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border">
+                  <div className="flex items-center gap-2.5">
+                    <Globe className="h-4 w-4 text-cyan-400" />
+                    <div>
+                      <div className="font-semibold text-foreground">
+                        {activeVless?.name || (isConfigured ? "AmneziaWG Server" : (isRu ? "Сервер не выбран" : "No server selected"))}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {activeVless?.server || (isConfigured ? address : (isRu ? "Добавьте профиль VPN" : "Add VPN profile"))}
+                      </div>
+                    </div>
+                  </div>
+                  {activeVless?.latency ? (
+                    <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 font-mono">
+                      {activeVless.latency} ms
+                    </Badge>
+                  ) : null}
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => setIsImportOpen(true)}
+                    className="flex-1 h-8 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-medium gap-1.5"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    <span>{isRu ? "Импорт .conf" : "Import .conf"}</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const link = prompt(isRu ? "Вставьте ссылку vless:// или vmess://" : "Paste vless:// or vmess:// link:");
+                      if (link && link.startsWith("vless://")) {
+                        setVlessInput(link);
+                        setTimeout(handleImportVless, 100);
+                      }
+                    }}
+                    className="flex-1 h-8 text-xs border-border bg-card hover:bg-muted text-foreground gap-1.5"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>{isRu ? "Добавить VLESS" : "Add VLESS"}</span>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Kill Switch Card */}
+            <Card className="border-border bg-card text-card-foreground shadow-sm">
+              <CardHeader className="pb-3 border-b border-border">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <Lock className="h-4 w-4 text-amber-400" />
+                      <span>Kill Switch</span>
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      {isRu ? "Защита от утечки реального IP адреса" : "Prevent Real IP Leaks on Tunnel Drop"}
+                    </CardDescription>
+                  </div>
+                  <Switch
+                    checked={killswitchEnabled}
+                    onCheckedChange={handleToggleKillswitch}
+                    disabled={isTogglingKs}
+                  />
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4 space-y-3 text-xs">
+                <p className="text-muted-foreground leading-relaxed">
+                  {isRu
+                    ? "При случайном падении VPN-соединения доступ к заблокированным сайтам моментально блокируется, не раскрывая ваш настоящий IP провайдеру или внешним серверам."
+                    : "If the VPN disconnects, traffic destined for blocked services is dropped immediately to prevent exposing your genuine ISP IP."}
+                </p>
+                <div className="flex items-center gap-2 text-emerald-400 text-[11px] pt-1">
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                  <span>{isRu ? "Защита DNS-запросов и nftables fw4 активна" : "DNS leak protection & nftables fw4 active"}</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* 1-Click Bypass Status Summary */}
+          <Card className="border-border bg-card text-card-foreground shadow-sm">
+            <CardHeader className="pb-3 border-b border-border">
+              <CardTitle className="text-xs font-semibold text-foreground">
+                {isRu ? "Статус 1-Click сценариев маршрутизации" : "1-Click Routing Scenarios Status"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-3.5 space-y-2 text-xs">
+              <div className="flex items-center justify-between p-2 rounded-lg bg-muted/20 border border-border">
+                <span className="font-medium text-foreground">YouTube 1080p / 4K</span>
+                <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 text-[10px]">
+                  ✓ Zapret ALT11 (Без VPN)
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-muted/20 border border-border">
+                <span className="font-medium text-foreground">Discord (Голос & Видео)</span>
+                <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 text-[10px]">
+                  ✓ Zapret ALT11 (Без VPN)
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-muted/20 border border-border">
+                <span className="font-medium text-foreground">Банки и сервисы РФ (Госуслуги)</span>
+                <Badge variant="outline" className="border-blue-500/30 text-blue-400 text-[10px]">
+                  ✓ RuNet Direct (Напрямую)
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-muted/20 border border-border">
+                <span className="font-medium text-foreground">Заблокированные сайты и AI</span>
+                <Badge variant="outline" className="border-indigo-500/30 text-indigo-400 text-[10px]">
+                  {isAnyVpnActive ? "✓ Через VPN" : "Ожидает VPN"}
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        /* Tabs for Expert Mode */
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="grid grid-cols-2 sm:grid-cols-5 max-w-2xl h-auto sm:h-9 gap-1">
           <TabsTrigger value="awg" className="text-xs gap-1.5 py-1.5">
             <Shield className="h-3.5 w-3.5" />
@@ -1128,6 +1290,7 @@ export const VpnManager: React.FC = () => {
           </Card>
         </TabsContent>
       </Tabs>
+      )}
 
       {/* ================= Modal 1: Import AmneziaWG .conf ================= */}
       <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>

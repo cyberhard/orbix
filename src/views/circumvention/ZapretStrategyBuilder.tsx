@@ -300,7 +300,7 @@ export const ZapretStrategyBuilder: React.FC = () => {
         {/* Right: Hostlists & Live Strategy Test */}
         <div className="space-y-4">
           {/* Live Strategy Tester */}
-          <Card className="border-primary/40 bg-gradient-to-b from-card to-card/60">
+          <Card className="border-border bg-card">
             <CardHeader className="pb-2">
               <CardTitle className="text-xs font-semibold flex items-center gap-1.5">
                 <Play className="h-3.5 w-3.5 text-primary" />

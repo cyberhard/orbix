@@ -47,8 +47,8 @@ export class ConfigValidator {
     }
 
     // 2. Schema Version Check
-    const schemaVersion = pkg.schema_version || 0;
-    if (typeof schemaVersion !== "number" || schemaVersion < 1) {
+    const schemaVersion = pkg.schema_version;
+    if (typeof schemaVersion !== "number" || !Number.isInteger(schemaVersion) || schemaVersion < 1) {
       errors.push("Missing or invalid schema_version number.");
     } else if (schemaVersion > CURRENT_SCHEMA_VERSION) {
       errors.push(

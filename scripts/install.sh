@@ -15,22 +15,26 @@ COLOR_YELLOW='\033[1;33m'
 COLOR_RED='\033[0;31m'
 COLOR_RESET='\033[0m'
 
+log() {
+    printf "%b\n" "$*"
+}
+
 print_banner() {
-    echo -e "${COLOR_CYAN}======================================================${COLOR_RESET}"
-    echo -e "${COLOR_GREEN}         ORBIX — OpenWrt Management Platform          ${COLOR_RESET}"
-    echo -e "${COLOR_CYAN}======================================================${COLOR_RESET}"
+    log "${COLOR_CYAN}======================================================${COLOR_RESET}"
+    log "${COLOR_GREEN}         ORBIX — OpenWrt Management Platform          ${COLOR_RESET}"
+    log "${COLOR_CYAN}======================================================${COLOR_RESET}"
 }
 
 check_root() {
     if [ "$(id -u)" != "0" ]; then
-        echo -e "${COLOR_RED}Error: This script must be run as root!${COLOR_RESET}" >&2
+        log "${COLOR_RED}Error: This script must be run as root!${COLOR_RESET}" >&2
         exit 1
     fi
 }
 
 check_system() {
     if [ ! -f /etc/openwrt_release ]; then
-        echo -e "${COLOR_RED}Error: /etc/openwrt_release not found. Is this an OpenWrt system?${COLOR_RESET}" >&2
+        log "${COLOR_RED}Error: /etc/openwrt_release not found. Is this an OpenWrt system?${COLOR_RESET}" >&2
         exit 1
     fi
     . /etc/openwrt_release
@@ -38,57 +42,65 @@ check_system() {
     OPENWRT_VER="${DISTRIB_RELEASE:-unknown}"
     TARGET="${DISTRIB_TARGET:-unknown}"
 
-    echo -e "Detected System: ${COLOR_YELLOW}${DISTRIB_DESCRIPTION}${COLOR_RESET}"
-    echo -e "Architecture:    ${COLOR_YELLOW}${ARCH} (${TARGET})${COLOR_RESET}"
+    log "Detected System: ${COLOR_YELLOW}${DISTRIB_DESCRIPTION}${COLOR_RESET}"
+    log "Architecture:    ${COLOR_YELLOW}${ARCH} (${TARGET})${COLOR_RESET}"
 }
 
 health_check() {
     print_banner
     check_system
-    echo -e "\n${COLOR_CYAN}--> Running ORBIX Health & Diagnostics Check...${COLOR_RESET}"
+    log "\n${COLOR_CYAN}--> Running ORBIX Health & Diagnostics Check...${COLOR_RESET}"
 
     # 1. Check uhttpd
     if /etc/init.d/uhttpd status >/dev/null 2>&1 || ps | grep -q "[u]httpd"; then
-        echo -e "  [✓] uhttpd Web Server:  ${COLOR_GREEN}RUNNING${COLOR_RESET}"
+        log "  [✓] uhttpd Web Server:  ${COLOR_GREEN}RUNNING${COLOR_RESET}"
     else
-        echo -e "  [✗] uhttpd Web Server:  ${COLOR_RED}STOPPED${COLOR_RESET}"
+        log "  [✗] uhttpd Web Server:  ${COLOR_RED}STOPPED${COLOR_RESET}"
     fi
 
     # 2. Check rpcd
     if /etc/init.d/rpcd status >/dev/null 2>&1 || ps | grep -q "[r]pcd"; then
-        echo -e "  [✓] rpcd System Daemon: ${COLOR_GREEN}RUNNING${COLOR_RESET}"
+        log "  [✓] rpcd System Daemon: ${COLOR_GREEN}RUNNING${COLOR_RESET}"
     else
-        echo -e "  [✗] rpcd System Daemon: ${COLOR_RED}STOPPED${COLOR_RESET}"
+        log "  [✗] rpcd System Daemon: ${COLOR_RED}STOPPED${COLOR_RESET}"
     fi
 
     # 3. Check ubus circumvention object
     if ubus list 2>/dev/null | grep -q "^circumvention$"; then
-        echo -e "  [✓] ORBIX RPCD Object:  ${COLOR_GREEN}REGISTERED & ACTIVE${COLOR_RESET}"
+        log "  [✓] ORBIX RPCD Object:  ${COLOR_GREEN}REGISTERED & ACTIVE${COLOR_RESET}"
     else
-        echo -e "  [!] ORBIX RPCD Object:  ${COLOR_YELLOW}PENDING FIRST REQUEST${COLOR_RESET}"
+        log "  [!] ORBIX RPCD Object:  ${COLOR_YELLOW}PENDING FIRST REQUEST${COLOR_RESET}"
     fi
 
     # 4. Check Web UI files in /www
     if [ -f "/www/index.html" ] && [ -f "/www/favicon.svg" ]; then
-        echo -e "  [✓] ORBIX Frontend:     ${COLOR_GREEN}INSTALLED IN /www${COLOR_RESET}"
+        log "  [✓] ORBIX Frontend:     ${COLOR_GREEN}INSTALLED IN /www${COLOR_RESET}"
     else
-        echo -e "  [✗] ORBIX Frontend:     ${COLOR_RED}MISSING OR INCOMPLETE${COLOR_RESET}"
+        log "  [✗] ORBIX Frontend:     ${COLOR_RED}MISSING OR INCOMPLETE${COLOR_RESET}"
     fi
 
     # 5. Check Resources
     OVERLAY_FREE_KB=$(df -k /overlay 2>/dev/null | awk 'NR==2 {print $4}' || echo "0")
     RAM_AVAIL_KB=$(grep MemAvailable /proc/meminfo 2>/dev/null | awk '{print $2}' || echo "131072")
-    echo -e "  [i] Storage Available:  ${COLOR_YELLOW}$((OVERLAY_FREE_KB / 1024)) MB${COLOR_RESET}"
-    echo -e "  [i] RAM Available:      ${COLOR_YELLOW}$((RAM_AVAIL_KB / 1024)) MB${COLOR_RESET}"
+    log "  [i] Storage Available:  ${COLOR_YELLOW}$((OVERLAY_FREE_KB / 1024)) MB${COLOR_RESET}"
+    log "  [i] RAM Available:      ${COLOR_YELLOW}$((RAM_AVAIL_KB / 1024)) MB${COLOR_RESET}"
     echo ""
 }
 
 uninstall_orbix() {
     print_banner
     check_root
-    echo -e "\n${COLOR_YELLOW}--> Uninstalling ORBIX Platform...${COLOR_RESET}"
+    log "\n${COLOR_YELLOW}--> Uninstalling ORBIX Platform...${COLOR_RESET}"
 
-    # Remove backend files
+    # Clean up any active watchdog processes deterministically
+    if [ -f "/tmp/uci_watchdog.sleep_pid" ]; then
+        kill -9 "$(cat /tmp/uci_watchdog.sleep_pid 2>/dev/null)" 2>/dev/null || true
+    fi
+    if [ -f "/tmp/uci_watchdog.pid" ]; then
+        kill -9 "$(cat /tmp/uci_watchdog.pid 2>/dev/null)" 2>/dev/null || true
+    fi
+
+    # Remove backend files and watchdog state
     rm -f /usr/libexec/rpcd/circumvention
     rm -f /usr/share/rpcd/acl.d/circumvention.json
     rm -f /tmp/uci_watchdog.* /tmp/uci_rollback_*
@@ -107,7 +119,7 @@ uninstall_orbix() {
     /etc/init.d/rpcd restart
     /etc/init.d/uhttpd restart || true
 
-    echo -e "${COLOR_GREEN}✓ ORBIX successfully uninstalled.${COLOR_RESET}\n"
+    log "${COLOR_GREEN}✓ ORBIX successfully uninstalled.${COLOR_RESET}\n"
     exit 0
 }
 
@@ -144,22 +156,22 @@ check_system
 # 1. Check Resources
 OVERLAY_FREE_KB=$(df -k /overlay 2>/dev/null | awk 'NR==2 {print $4}' || echo "0")
 if [ "$OVERLAY_FREE_KB" -lt 8192 ]; then
-    echo -e "${COLOR_YELLOW}Warning: Less than 8MB free in /overlay (${OVERLAY_FREE_KB} KB).${COLOR_RESET}"
+    log "${COLOR_YELLOW}Warning: Less than 8MB free in /overlay (${OVERLAY_FREE_KB} KB).${COLOR_RESET}"
 fi
 
 RAM_AVAIL_KB=$(grep MemAvailable /proc/meminfo 2>/dev/null | awk '{print $2}' || echo "131072")
-echo -e "Available RAM:   ${COLOR_YELLOW}$((RAM_AVAIL_KB / 1024)) MB${COLOR_RESET}"
+log "Available RAM:   ${COLOR_YELLOW}$((RAM_AVAIL_KB / 1024)) MB${COLOR_RESET}"
 
 # 2. Package Manager Check
 PKG_MGR="opkg"
-if which apk >/dev/null 2>&1; then
+if command -v apk >/dev/null 2>&1; then
     PKG_MGR="apk"
 fi
-echo -e "Package Manager: ${COLOR_GREEN}${PKG_MGR}${COLOR_RESET}"
+log "Package Manager: ${COLOR_GREEN}${PKG_MGR}${COLOR_RESET}"
 
 # 3. Dependencies
 if [ "$ACTION" != "--update" ]; then
-    echo -e "\n${COLOR_CYAN}--> Step 1/4: Installing required dependencies...${COLOR_RESET}"
+    log "\n${COLOR_CYAN}--> Step 1/4: Installing required dependencies...${COLOR_RESET}"
     REQUIRED_PKGS="uhttpd rpcd rpcd-mod-file jsonfilter ca-certificates curl libubox"
 
     if [ "$PKG_MGR" = "apk" ]; then
@@ -182,7 +194,7 @@ if [ "$ACTION" != "--update" ]; then
 fi
 
 # 4. Deploy Backend & ACL
-echo -e "\n${COLOR_CYAN}--> Step 2/4: Deploying hardened RPCD backend...${COLOR_RESET}"
+log "\n${COLOR_CYAN}--> Step 2/4: Deploying hardened RPCD backend...${COLOR_RESET}"
 mkdir -p /usr/libexec/rpcd /usr/share/rpcd/acl.d
 
 if [ -f "./rpcd-circumvention.sh" ]; then
@@ -247,7 +259,7 @@ EOF
 fi
 
 # 5. Deploy Frontend Web UI
-echo -e "\n${COLOR_CYAN}--> Step 3/4: Deploying ORBIX Web UI...${COLOR_RESET}"
+log "\n${COLOR_CYAN}--> Step 3/4: Deploying ORBIX Web UI...${COLOR_RESET}"
 
 # Back up original /www if not already backed up
 if [ -d "/www" ] && [ ! -d "/www.orbix.bak" ] && [ ! -f "/www/favicon.svg" ]; then
@@ -265,7 +277,7 @@ else
 fi
 
 # 6. Web Server & Service Configuration
-echo -e "\n${COLOR_CYAN}--> Step 4/4: Configuring services & permissions...${COLOR_RESET}"
+log "\n${COLOR_CYAN}--> Step 4/4: Configuring services & permissions...${COLOR_RESET}"
 uci set uhttpd.main.listen_http='0.0.0.0:80 [::]:80' 2>/dev/null || true
 uci set uhttpd.main.home='/www' 2>/dev/null || true
 uci commit uhttpd 2>/dev/null || true
@@ -274,13 +286,16 @@ uci commit uhttpd 2>/dev/null || true
 /etc/init.d/uhttpd restart || /etc/init.d/uhttpd start
 
 # 7. Verification
-echo -e "\n${COLOR_CYAN}--> Verifying installation...${COLOR_RESET}"
+log "\n${COLOR_CYAN}--> Verifying installation...${COLOR_RESET}"
 sleep 1
 health_check
 
-echo -e "${COLOR_GREEN}======================================================${COLOR_RESET}"
-echo -e "${COLOR_GREEN}          Installation Successful! ORBIX Ready        ${COLOR_RESET}"
-echo -e "${COLOR_GREEN}======================================================${COLOR_RESET}"
-echo -e "Web Interface:      ${COLOR_CYAN}http://192.168.1.1/#/overview${COLOR_RESET}"
-echo -e "Network Topology:   ${COLOR_CYAN}http://192.168.1.1/#/traffic${COLOR_RESET}"
-echo -e "Setup Wizard:       ${COLOR_CYAN}http://192.168.1.1/#/wizard${COLOR_RESET}\n"
+LAN_IP=$(uci -q get network.lan.ipaddr 2>/dev/null | cut -d/ -f1)
+[ -z "$LAN_IP" ] && LAN_IP="192.168.1.1"
+
+log "${COLOR_GREEN}======================================================${COLOR_RESET}"
+log "${COLOR_GREEN}          Installation Successful! ORBIX Ready        ${COLOR_RESET}"
+log "${COLOR_GREEN}======================================================${COLOR_RESET}"
+log "Web Interface:      ${COLOR_CYAN}http://${LAN_IP}/#/overview${COLOR_RESET}"
+log "Network Topology:   ${COLOR_CYAN}http://${LAN_IP}/#/traffic${COLOR_RESET}"
+log "Setup Wizard:       ${COLOR_CYAN}http://${LAN_IP}/#/wizard${COLOR_RESET}\n"

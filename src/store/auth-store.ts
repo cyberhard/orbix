@@ -46,16 +46,11 @@ export const useAuthStore = create<AuthState>((set) => {
           set({ isAuthenticated: true });
           return;
         } catch {
-          // Stale session, attempt auto-login with default root:root
+          // Session is expired or invalid
+          ubusClient.logout();
         }
       }
-
-      try {
-        await ubusClient.login("root", "root");
-        set({ isAuthenticated: true });
-      } catch {
-        set({ isAuthenticated: false });
-      }
+      set({ isAuthenticated: false });
     },
   };
 });

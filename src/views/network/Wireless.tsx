@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ubusClient } from "@/lib/ubus-client";
 import { useI18nStore } from "@/store/i18n-store";
+import { usePolicyStore } from "@/store/policy-store";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,11 +35,16 @@ import {
   EyeOff,
   RefreshCw,
   Signal,
+  Sparkles,
+  Users,
 } from "lucide-react";
 
 export const Wireless: React.FC = () => {
   const { language } = useI18nStore();
   const isRu = language === "ru";
+
+  const { operatingMode } = usePolicyStore();
+  const isSimple = operatingMode === "simple";
 
   const { data: wifiMap, refetch, isLoading } = useQuery({
     queryKey: ["wireless-devices"],
@@ -49,6 +55,15 @@ export const Wireless: React.FC = () => {
   const [scanOpen, setScanOpen] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanResults, setScanResults] = useState<any[]>([]);
+
+  // Smart Wi-Fi Unified Form State (Simple Mode)
+  const [smartSsid, setSmartSsid] = useState("OpenWRT");
+  const [smartKey, setSmartKey] = useState("12345678");
+  const [smartDisabled, setSmartDisabled] = useState(false);
+  const [smartShowKey, setSmartShowKey] = useState(false);
+  const [guestEnabled, setGuestEnabled] = useState(false);
+  const [smartSaving, setSmartSaving] = useState(false);
+  const [smartSaved, setSmartSaved] = useState(false);
 
   // Per-radio form state
   const [radioForms, setRadioForms] = useState<
@@ -105,9 +120,48 @@ export const Wireless: React.FC = () => {
           };
         }
       });
+      // Sync Smart Wi-Fi defaults from primary radio
+      const radiosArr = Object.entries(wifiMap);
+      if (radiosArr.length > 0) {
+        const primary = radiosArr.find(([name]) => name.includes("1")) || radiosArr[0];
+        const primaryIface = primary[1]?.interfaces?.[0];
+        const primaryConfig = primaryIface?.config || {};
+        if (primaryConfig.ssid) setSmartSsid(primaryConfig.ssid);
+        if (primaryConfig.key) setSmartKey(primaryConfig.key);
+        if (primary[1]?.config?.disabled !== undefined) setSmartDisabled(Boolean(primary[1].config.disabled));
+      }
+
       return next;
     });
   }, [wifiMap]);
+
+  const handleSaveSmartWifi = async () => {
+    setSmartSaving(true);
+    setSmartSaved(false);
+    try {
+      if (wifiMap) {
+        for (const [radioName, radio] of Object.entries(wifiMap)) {
+          const ifaceSection = radio?.interfaces?.[0]?.section || `default_${radioName}`;
+          const currentForm = radioForms[radioName];
+          await ubusClient.saveWifiRadio(radioName, ifaceSection, {
+            ssid: smartSsid,
+            key: smartKey,
+            encryption: currentForm?.encryption || "psk2",
+            channel: currentForm?.channel || (radio.config?.band === "5g" ? 36 : 1),
+            htmode: currentForm?.htmode || (radio.config?.band === "5g" ? "EHT80" : "EHT20"),
+            disabled: smartDisabled,
+          });
+        }
+      }
+      await refetch();
+      setSmartSaved(true);
+      setTimeout(() => setSmartSaved(false), 4000);
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setSmartSaving(false);
+    }
+  };
 
   const handleFieldChange = (radioName: string, field: string, val: any) => {
     setRadioForms((prev) => ({
@@ -204,16 +258,18 @@ export const Wireless: React.FC = () => {
           </p>
         </div>
         <div className="flex flex-wrap sm:flex-nowrap gap-2 w-full sm:w-auto">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleStartScan}
-            disabled={isScanning}
-            className="text-xs gap-1.5 h-8 border-zinc-800 bg-zinc-900 text-zinc-200 hover:bg-zinc-800 flex-1 sm:flex-initial"
-          >
-            <Scan className={`h-3.5 w-3.5 ${isScanning ? "animate-spin" : ""}`} />
-            {isScanning ? (isRu ? "Сканирование..." : "Scanning...") : (isRu ? "Сканировать эфир" : "Scan Channels")}
-          </Button>
+          {!isSimple && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleStartScan}
+              disabled={isScanning}
+              className="text-xs gap-1.5 h-8 border-zinc-800 bg-zinc-900 text-zinc-200 hover:bg-zinc-800 flex-1 sm:flex-initial"
+            >
+              <Scan className={`h-3.5 w-3.5 ${isScanning ? "animate-spin" : ""}`} />
+              {isScanning ? (isRu ? "Сканирование..." : "Scanning...") : (isRu ? "Сканировать эфир" : "Scan Channels")}
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -226,8 +282,114 @@ export const Wireless: React.FC = () => {
         </div>
       </div>
 
-      {/* Radios Grid */}
-      <div className="grid gap-6 md:grid-cols-2">
+      {/* Simple Mode vs Expert Mode */}
+      {isSimple ? (
+        <div className="space-y-6">
+          <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/40 flex items-start gap-3">
+            <Sparkles className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
+            <div className="space-y-1 text-xs">
+              <div className="font-semibold text-zinc-200">
+                {isRu ? "Smart Wi-Fi (Band Steering)" : "Smart Wi-Fi (Band Steering)"}
+              </div>
+              <p className="text-zinc-400 leading-relaxed">
+                {isRu
+                  ? "Роутер объединяет сети 2.4 GHz и 5 GHz под одним именем. Ваши смартфоны, ноутбуки и ТВ автоматически переключаются на самый быстрый диапазон без обрыва связи."
+                  : "Both 2.4 GHz and 5 GHz radios are unified under a single network name. Devices automatically roam to the fastest frequency."}
+              </p>
+            </div>
+          </div>
+
+          <Card className="border-zinc-800 bg-zinc-950 shadow-xl max-w-2xl">
+            <CardHeader className="border-b border-zinc-800 pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
+                  <Wifi className="h-4 w-4 text-emerald-400" />
+                  <span>{isRu ? "Домашняя сеть Wi-Fi" : "Home Wi-Fi Network"}</span>
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-zinc-400 font-medium">
+                    {!smartDisabled ? (isRu ? "Активна" : "Enabled") : (isRu ? "Отключена" : "Disabled")}
+                  </span>
+                  <Switch
+                    checked={!smartDisabled}
+                    onCheckedChange={(val) => setSmartDisabled(!val)}
+                  />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-4 text-xs">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-zinc-300">
+                  {isRu ? "Имя сети (SSID)" : "Network Name (SSID)"}
+                </label>
+                <Input
+                  value={smartSsid}
+                  onChange={(e) => setSmartSsid(e.target.value)}
+                  placeholder="Home-Network"
+                  className="h-9 text-xs bg-zinc-900 border-zinc-700 text-zinc-200 font-medium"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-zinc-300">
+                  {isRu ? "Пароль Wi-Fi" : "Wi-Fi Password"}
+                </label>
+                <div className="relative">
+                  <Input
+                    type={smartShowKey ? "text" : "password"}
+                    value={smartKey}
+                    onChange={(e) => setSmartKey(e.target.value)}
+                    placeholder="Enter password..."
+                    className="h-9 text-xs bg-zinc-900 border-zinc-700 text-zinc-200 font-mono pr-9"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSmartShowKey(!smartShowKey)}
+                    className="absolute right-0 top-0 h-9 w-9 px-0 text-zinc-400 hover:text-zinc-200"
+                  >
+                    {smartShowKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="p-3 bg-zinc-900/60 rounded-lg border border-zinc-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-medium text-zinc-200 flex items-center gap-1.5">
+                      <Users className="h-3.5 w-3.5 text-zinc-400" />
+                      <span>{isRu ? "Изолированная гостевая сеть" : "Guest Wi-Fi Network"}</span>
+                    </div>
+                    <div className="text-[11px] text-zinc-500">
+                      {isRu ? "Гости не смогут видеть ваши домашние компьютеры и хранилища" : "Isolates guest devices from your private LAN"}
+                    </div>
+                  </div>
+                  <Switch checked={guestEnabled} onCheckedChange={setGuestEnabled} />
+                </div>
+              </div>
+
+              {smartSaved && (
+                <div className="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-800 text-emerald-300 text-xs flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  <span>{isRu ? "Параметры Wi-Fi успешно сохранены и применены!" : "Wi-Fi settings saved and applied!"}</span>
+                </div>
+              )}
+
+              <Button
+                onClick={handleSaveSmartWifi}
+                disabled={smartSaving}
+                className="w-full h-10 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-medium gap-2 mt-2"
+              >
+                {smartSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                <span>{isRu ? "Сохранить настройки Wi-Fi" : "Save Wi-Fi Settings"}</span>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        /* Radios Grid */
+        <div className="grid gap-6 md:grid-cols-2">
         {radios.map(([radioName, radio]) => {
           const form = radioForms[radioName] || {
             ssid: "OpenWrt",
@@ -467,6 +629,7 @@ export const Wireless: React.FC = () => {
           );
         })}
       </div>
+      )}
 
       {/* Channel Scan Survey Modal */}
       <Dialog open={scanOpen} onOpenChange={setScanOpen}>

@@ -37,7 +37,7 @@ export class ConfigImporter {
     }
 
     const validation = ConfigValidator.validate(parsed);
-    if (!validation.isValid && !validation.isEncrypted) {
+    if (!validation.isValid) {
       throw new Error(`Ошибки валидации схемы: ${validation.errors.join("; ")}`);
     }
 
@@ -61,7 +61,7 @@ export class ConfigImporter {
       try {
         config = JSON.parse(decryptedJsonStr);
       } catch {
-        throw new Error("Расшифрованные данные повреждены.");
+        throw new Error("Расшифрованные данные повреждены (некорректный JSON).");
       }
 
       // Re-validate decrypted configuration
@@ -74,8 +74,34 @@ export class ConfigImporter {
       if (!decValidation.isValid) {
         throw new Error(`Ошибки в расшифрованной конфигурации: ${decValidation.errors.join("; ")}`);
       }
+
+      // Verify SHA-256 Checksum on decrypted content
+      if (parsed.metadata?.checksum_sha256) {
+        const hashOfDecrypted = await BackupCrypto.computeSha256(decryptedJsonStr);
+        const hashPretty = await BackupCrypto.computeSha256(JSON.stringify(config, null, 2));
+        if (
+          hashOfDecrypted !== parsed.metadata.checksum_sha256 &&
+          hashPretty !== parsed.metadata.checksum_sha256
+        ) {
+          throw new Error(
+            `Ошибка проверки контрольной суммы (SHA-256 mismatch): данные конфигурации повреждены.`
+          );
+        }
+      }
     } else {
       config = parsed.configuration as PanelConfiguration;
+
+      // Verify SHA-256 Checksum for unencrypted package
+      if (parsed.metadata?.checksum_sha256) {
+        const hashPretty = await BackupCrypto.computeSha256(JSON.stringify(config, null, 2));
+        const hashCompact = await BackupCrypto.computeSha256(JSON.stringify(config));
+        if (
+          hashPretty !== parsed.metadata.checksum_sha256 &&
+          hashCompact !== parsed.metadata.checksum_sha256
+        ) {
+          validation.warnings.push("Контрольная сумма SHA-256 пакета отличается от сохраненной в метаданных.");
+        }
+      }
     }
 
     // Query live router hardware to analyze adaptation

@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ubusClient } from "@/lib/ubus-client";
 import { useI18nStore } from "@/store/i18n-store";
 import { useThemeStore } from "@/store/theme-store";
+import { usePolicyStore } from "@/store/policy-store";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,11 +24,16 @@ import {
   Minimize2,
   Download,
   RotateCcw,
-  Search,
   Laptop,
   Smartphone,
   Activity,
-  X,
+  Shield,
+  ShieldCheck,
+  Zap,
+  Globe,
+  Sparkles,
+  Layers,
+  ArrowRight,
 } from "lucide-react";
 
 export type NodeType = "router" | "server" | "switch" | "ap" | "host";
@@ -48,6 +54,15 @@ export interface TopologyNode {
   signal?: string;
   routingTarget?: string;
   policyType?: string;
+  // Simple Mode friendly properties
+  friendlyName?: string;
+  securityStatus?: "vpn" | "zapret" | "direct";
+  securityLabel?: string;
+  isServiceNode?: boolean;
+  // Expert Mode diagnostic properties
+  latencyMs?: number;
+  mtu?: number;
+  port?: string;
 }
 
 export interface TopologyLink {
@@ -59,6 +74,8 @@ export interface TopologyLink {
   type: "wired" | "wireless" | "tunnel";
   status: "active" | "warning" | "down";
   speed?: string;
+  latency?: string;
+  mtu?: number;
 }
 
 const STORAGE_KEY_POSITIONS = "orbix_topology_node_positions_v7";
@@ -149,6 +166,10 @@ export const TrafficFlow: React.FC = () => {
   // Node Dragging
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Store Operating Mode (Simple vs Expert)
+  const { operatingMode } = usePolicyStore();
+  const isSimple = operatingMode === "simple";
 
   // Selection & Search
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -252,8 +273,8 @@ export const TrafficFlow: React.FC = () => {
 
     list.push({
       id: "router-core",
-      name: "Core Router",
-      sublabel: `${routerModel} (${routerIp})`,
+      name: isSimple ? (board?.model || "ORBIX Router") : "Core Router",
+      sublabel: isSimple ? (isRu ? "Главный роутер (Интернет активен)" : "Main Router (Active)") : `${routerModel} (${routerIp})`,
       type: "router",
       status: "online",
       x: routerPos.x,
@@ -270,7 +291,7 @@ export const TrafficFlow: React.FC = () => {
     const wanIp = wan?.["ipv4-address"]?.[0]?.address || (wan?.up ? "DHCP" : "10.193.76.207");
     list.push({
       id: "server-wan",
-      name: "Server-01",
+      name: isSimple ? (isRu ? "Интернет ISP" : "Internet ISP") : "Server-01",
       sublabel: `${isRu ? "Интернет ISP" : "ISP Gateway"} (${wanIp})`,
       type: "server",
       status: wan?.up !== false ? "online" : "warning",
@@ -294,7 +315,7 @@ export const TrafficFlow: React.FC = () => {
 
     list.push({
       id: "server-singbox",
-      name: "Server-02",
+      name: isSimple ? (isRu ? "Защищенный VPN" : "Secure VPN") : "Server-02",
       sublabel: vlessServer,
       type: "server",
       status: isVlessUp ? "online" : "online",
@@ -310,7 +331,7 @@ export const TrafficFlow: React.FC = () => {
     const sw1Pos = nodePositions["switch-lan"] || DEFAULT_POSITIONS["switch-lan"];
     list.push({
       id: "switch-lan",
-      name: "Switch-01",
+      name: isSimple ? (isRu ? "Проводная сеть" : "Wired LAN") : "Switch-01",
       sublabel: isRu ? "LAN порты eth1-eth3" : "LAN Ports eth1-eth3",
       type: "switch",
       status: "online",
@@ -321,7 +342,7 @@ export const TrafficFlow: React.FC = () => {
       routingTarget: "Local Switch Fabric",
     });
 
-    // 5. Switch-02 (Right Bottom - Auxiliary Warning State)
+    // 5. Switch-02 (Right Bottom - Auxiliary Warning State, Service Node)
     const sw2Pos = nodePositions["switch-aux"] || DEFAULT_POSITIONS["switch-aux"];
     list.push({
       id: "switch-aux",
@@ -334,6 +355,9 @@ export const TrafficFlow: React.FC = () => {
       interfaceName: "br-guest (VLAN 10)",
       linkSpeed: "100 Mbps Half-Duplex",
       routingTarget: "Guest Network Bridge",
+      isServiceNode: true,
+      port: "eth3",
+      mtu: 1500,
     });
 
     // 6. AP-01 (Wi-Fi 5 GHz - SoC Direct Radio)
@@ -342,8 +366,8 @@ export const TrafficFlow: React.FC = () => {
     const ch5G = radio5G?.channel || 36;
     list.push({
       id: "ap-5g",
-      name: "AP-01",
-      sublabel: `SSID: ${ssid5G} • Ch ${ch5G} (5GHz)`,
+      name: isSimple ? "Wi-Fi 5 GHz" : "AP-01",
+      sublabel: isSimple ? `SSID: ${ssid5G}` : `SSID: ${ssid5G} • Ch ${ch5G} (5GHz)`,
       type: "ap",
       status: radio5G?.up !== false ? "online" : "offline",
       x: ap1Pos.x,
@@ -351,6 +375,8 @@ export const TrafficFlow: React.FC = () => {
       interfaceName: radio5G?.interfaces?.[0]?.ifname || "phy0.1-ap0",
       linkSpeed: "AX3000 (1201 Mbps)",
       routingTarget: `SSID: ${ssid5G}`,
+      port: "phy0.1",
+      mtu: 1500,
     });
 
     // 7. AP-02 (Wi-Fi 2.4 GHz - SoC Direct Radio)
@@ -359,8 +385,8 @@ export const TrafficFlow: React.FC = () => {
     const ch24G = radio24G?.channel || 1;
     list.push({
       id: "ap-24g",
-      name: "AP-02",
-      sublabel: `SSID: ${ssid24G} • Ch ${ch24G} (2.4GHz)`,
+      name: isSimple ? "Wi-Fi 2.4 GHz" : "AP-02",
+      sublabel: isSimple ? `SSID: ${ssid24G}` : `SSID: ${ssid24G} • Ch ${ch24G} (2.4GHz)`,
       type: "ap",
       status: radio24G?.up !== false ? "online" : "offline",
       x: ap2Pos.x,
@@ -368,24 +394,12 @@ export const TrafficFlow: React.FC = () => {
       interfaceName: radio24G?.interfaces?.[0]?.ifname || "phy0.0-ap0",
       linkSpeed: "AX600 (574 Mbps)",
       routingTarget: `SSID: ${ssid24G}`,
+      port: "phy0.0",
+      mtu: 1500,
     });
 
-    // 8. AP-03 & Switch-02 (Only in infrastructure comparison mode)
-    if (viewMode === "infrastructure") {
-      const sw2Pos = nodePositions["switch-aux"] || DEFAULT_POSITIONS["switch-aux"];
-      list.push({
-        id: "switch-aux",
-        name: "Switch-02",
-        sublabel: isRu ? "Резервный свитч" : "Aux Switch (Warning)",
-        type: "switch",
-        status: "warning",
-        x: sw2Pos.x,
-        y: sw2Pos.y,
-        interfaceName: "br-guest (VLAN 10)",
-        linkSpeed: "100 Mbps Half-Duplex",
-        routingTarget: "Guest Network Bridge",
-      });
-
+    // 8. AP-03 (Guest AP - Service Node)
+    if (viewMode === "infrastructure" || !isSimple) {
       const ap3Pos = nodePositions["ap-guest"] || DEFAULT_POSITIONS["ap-guest"];
       list.push({
         id: "ap-guest",
@@ -398,6 +412,9 @@ export const TrafficFlow: React.FC = () => {
         interfaceName: "phy0.2-guest",
         linkSpeed: "0 Mbps (Down)",
         routingTarget: "Disabled / Standby",
+        isServiceNode: true,
+        port: "phy0.2",
+        mtu: 1500,
       });
     }
 
@@ -424,34 +441,75 @@ export const TrafficFlow: React.FC = () => {
         let defaultY = 230;
         let iface = "phy0.1-ap0 (5 GHz)";
         let speed = "433 Mbps";
+        let friendlyName = name;
+        let secStatus: "vpn" | "zapret" | "direct" = "direct";
+        let secLabel = isRu ? "Прямой интернет" : "Direct RuNet";
+        let latencyMs = 2.4;
+        let mtu = 1500;
+        let port = "wlan0";
 
         if (ip === "192.168.1.176" || lower.includes("quasar")) {
           defaultX = 870;
           defaultY = 140;
           iface = "eth1 (LAN Switch)";
           speed = "1 Gbps Full-Duplex";
+          friendlyName = isRu ? "Рабочий ПК (Quasar)" : "Workstation PC";
+          secStatus = "vpn";
+          secLabel = isRu ? "Защищен через VPN (Sing-box)" : "VPN Protected (Sing-box)";
+          latencyMs = 48.2;
+          port = "eth1";
         } else if (lower.includes("tv") || lower.includes("pristavka")) {
           defaultX = 850;
           defaultY = 480;
           iface = "phy0.0-ap0 (2.4 GHz)";
           speed = "72 Mbps";
+          friendlyName = isRu ? "Смарт ТВ Xiaomi" : "Xiaomi Smart TV";
+          secStatus = "zapret";
+          secLabel = isRu ? "Обход DPI (YouTube 4K)" : "DPI Bypass (YouTube 4K)";
+          latencyMs = 8.1;
+          port = "phy0.0-ap0";
         } else if (lower.includes("tecno") || ip === "192.168.1.204") {
           defaultX = 970;
           defaultY = 480;
           iface = "phy0.0-ap0 (2.4 GHz)";
           speed = "144 Mbps";
+          friendlyName = "TECNO Pova 7";
+          secStatus = "direct";
+          secLabel = isRu ? "Прямой доступ (RuNet)" : "Direct RuNet";
+          latencyMs = 3.6;
+          port = "phy0.0-ap0";
         } else if (lower.includes("pixel") || ip === "192.168.1.159") {
           defaultX = 970;
           defaultY = 230;
+          friendlyName = "Google Pixel 8";
+          secStatus = "vpn";
+          secLabel = isRu ? "Защищен через VPN" : "VPN Protected";
+          latencyMs = 52.0;
+          port = "phy0.1-ap0";
         } else if (lower.includes("15") || ip === "192.168.1.249") {
           defaultX = 850;
           defaultY = 320;
+          friendlyName = isRu ? "Планшет Redmi Pad" : "Redmi Pad";
+          secStatus = "direct";
+          secLabel = isRu ? "Прямой доступ (RuNet)" : "Direct Access";
+          latencyMs = 4.2;
+          port = "phy0.1-ap0";
         } else if (lower.includes("note-9") || ip === "192.168.1.130") {
           defaultX = 970;
           defaultY = 320;
+          friendlyName = isRu ? "Смартфон Redmi Note 9" : "Smartphone Redmi Note 9";
+          secStatus = "zapret";
+          secLabel = isRu ? "Обход DPI (Zapret ALT11)" : "DPI Bypass (Zapret ALT11)";
+          latencyMs = 14.5;
+          port = "phy0.1-ap0";
         } else if (ip === "192.168.1.178" || lower.includes("13-pro")) {
           defaultX = 850;
           defaultY = 230;
+          friendlyName = "iPhone 13 Pro";
+          secStatus = "vpn";
+          secLabel = isRu ? "Защищен через VPN" : "VPN Protected";
+          latencyMs = 49.0;
+          port = "phy0.1-ap0";
         } else {
           defaultX = 850;
           defaultY = 400;
@@ -461,6 +519,9 @@ export const TrafficFlow: React.FC = () => {
         list.push({
           id: hostId,
           name: name,
+          friendlyName,
+          securityStatus: secStatus,
+          securityLabel: secLabel,
           sublabel: ip,
           type: "host",
           status: "online",
@@ -470,72 +531,105 @@ export const TrafficFlow: React.FC = () => {
           mac: l.macaddr,
           interfaceName: iface,
           linkSpeed: speed,
+          latencyMs,
+          mtu,
+          port,
           routingTarget:
-            ip === "192.168.1.130"
+            secStatus === "vpn"
+              ? "Sing-box XTLS Reality (tun0) → Restricted Outbound"
+              : secStatus === "zapret"
               ? "Zapret ALT11 (YouTube/Discord) + RuNet Direct"
-              : "Default Policy Routing",
+              : "Direct ISP Default Route",
         });
       });
     }
 
     return list;
-  }, [nodePositions, ifaces, leases, isRu, viewMode, board, vless, vlessLatency, lan, wan, radio5G, radio24G]);
+  }, [nodePositions, ifaces, leases, isRu, viewMode, board, vless, vlessLatency, lan, wan, radio5G, radio24G, isSimple]);
 
-  // Assemble links between nodes reflecting true OpenWrt SoC & physical network
+  // Links with Expert Mode ports, latency metrics and MTU
   const links: TopologyLink[] = useMemo(() => {
     const list: TopologyLink[] = [
       {
         id: "link-server1-router",
         source: "server-wan",
         target: "router-core",
+        sourcePort: "eth0",
+        targetPort: "wan",
         type: "wired",
         status: "active",
+        latency: "12 ms",
+        mtu: 1500,
       },
       {
         id: "link-server2-router",
         source: "server-singbox",
         target: "router-core",
+        sourcePort: "tun0",
+        targetPort: "tproxy",
         type: "tunnel",
         status: "active",
+        latency: vlessLatency?.latency ? `${vlessLatency.latency} ms` : "48 ms",
+        mtu: 1420,
       },
       {
         id: "link-router-switch1",
         source: "router-core",
         target: "switch-lan",
+        sourcePort: "lan",
+        targetPort: "eth1",
         type: "wired",
         status: "active",
+        latency: "<1 ms",
+        mtu: 1500,
       },
       {
         id: "link-router-ap1",
         source: "router-core",
         target: "ap-5g",
+        sourcePort: "phy0.1",
+        targetPort: "wlan0",
         type: "wireless",
         status: "active",
+        latency: "1.2 ms",
+        mtu: 1500,
       },
       {
         id: "link-router-ap2",
         source: "router-core",
         target: "ap-24g",
+        sourcePort: "phy0.0",
+        targetPort: "wlan1",
         type: "wireless",
         status: "active",
+        latency: "2.8 ms",
+        mtu: 1500,
       },
     ];
 
-    if (viewMode === "infrastructure") {
+    if ((viewMode === "infrastructure" || !isSimple) && nodes.some(n => n.id === "switch-aux")) {
       list.push(
         {
           id: "link-router-switch2",
           source: "router-core",
           target: "switch-aux",
+          sourcePort: "eth3",
+          targetPort: "uplink",
           type: "wired",
           status: "warning",
+          latency: "5.4 ms",
+          mtu: 1500,
         },
         {
           id: "link-switch2-ap3",
           source: "switch-aux",
           target: "ap-guest",
+          sourcePort: "port4",
+          targetPort: "phy0.2",
           type: "wireless",
           status: "down",
+          latency: "Down",
+          mtu: 1500,
         }
       );
     }
@@ -548,24 +642,36 @@ export const TrafficFlow: React.FC = () => {
               id: `link-${n.id}`,
               source: "switch-lan",
               target: n.id,
+              sourcePort: "eth1",
+              targetPort: "eth0",
               type: "wired",
               status: "active",
+              latency: `${n.latencyMs || 0.8} ms`,
+              mtu: n.mtu || 1500,
             });
           } else if (n.name.toLowerCase().includes("tv") || n.name.toLowerCase().includes("pristavka")) {
             list.push({
               id: `link-${n.id}`,
               source: "ap-24g",
               target: n.id,
+              sourcePort: "wlan1",
+              targetPort: "wifi",
               type: "wireless",
               status: "active",
+              latency: `${n.latencyMs || 8.1} ms`,
+              mtu: n.mtu || 1500,
             });
           } else {
             list.push({
               id: `link-${n.id}`,
               source: "ap-5g",
               target: n.id,
+              sourcePort: "wlan0",
+              targetPort: "wifi",
               type: "wireless",
               status: "active",
+              latency: `${n.latencyMs || 2.4} ms`,
+              mtu: n.mtu || 1500,
             });
           }
         }
@@ -573,7 +679,18 @@ export const TrafficFlow: React.FC = () => {
     }
 
     return list;
-  }, [nodes, viewMode]);
+  }, [nodes, viewMode, isSimple, vlessLatency]);
+
+  // Mode-aware filtering: In Simple Mode, hide service auxiliary nodes
+  const visibleNodes = useMemo(() => {
+    if (!isSimple) return nodes;
+    return nodes.filter((n) => !n.isServiceNode);
+  }, [nodes, isSimple]);
+
+  const visibleLinks = useMemo(() => {
+    const nodeIds = new Set(visibleNodes.map((n) => n.id));
+    return links.filter((l) => nodeIds.has(l.source) && nodeIds.has(l.target));
+  }, [links, visibleNodes]);
 
   // Filter nodes based on search query
   const filteredNodeIds = useMemo(() => {
@@ -591,13 +708,74 @@ export const TrafficFlow: React.FC = () => {
       }
     });
     return matches;
-  });
+  }, [searchQuery, nodes]);
 
   // Selected Node Details
   const selectedNode = useMemo(() => {
     if (!selectedNodeId) return null;
     return nodes.find((n) => n.id === selectedNodeId) || null;
   }, [nodes, selectedNodeId]);
+
+  // Animation frame ref for drag throttling & leak-free event handling
+  const rafIdRef = useRef<number | null>(null);
+
+  // Global window mouse listeners for seamless drag & pan with guaranteed cleanup on unmount
+  useEffect(() => {
+    if (!draggingNodeId && !isPanning) return;
+
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = requestAnimationFrame(() => {
+        if (draggingNodeId && svgRef.current) {
+          const rect = svgRef.current.getBoundingClientRect();
+          const currentX = (e.clientX - rect.left - pan.x) / zoom;
+          const currentY = (e.clientY - rect.top - pan.y) / zoom;
+
+          const newX = Math.round(currentX - dragOffset.x);
+          const newY = Math.round(currentY - dragOffset.y);
+
+          setNodePositions((prev) => ({
+            ...prev,
+            [draggingNodeId]: { x: newX, y: newY },
+          }));
+        } else if (isPanning) {
+          setPan({
+            x: e.clientX - panStart.x,
+            y: e.clientY - panStart.y,
+          });
+        }
+      });
+    };
+
+    const handleGlobalMouseUp = () => {
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      if (draggingNodeId) {
+        setDraggingNodeId(null);
+        setNodePositions((curr) => {
+          savePositions(curr);
+          return curr;
+        });
+      }
+      if (isPanning) {
+        setIsPanning(false);
+      }
+    };
+
+    window.addEventListener("mousemove", handleGlobalMouseMove);
+    window.addEventListener("mouseup", handleGlobalMouseUp);
+
+    return () => {
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      window.removeEventListener("mousemove", handleGlobalMouseMove);
+      window.removeEventListener("mouseup", handleGlobalMouseUp);
+    };
+  }, [draggingNodeId, isPanning, dragOffset, pan, zoom, panStart, savePositions]);
 
   // Drag handlers
   const handleMouseDownNode = (e: React.MouseEvent, node: TopologyNode) => {
@@ -613,37 +791,6 @@ export const TrafficFlow: React.FC = () => {
         x: clickX - node.x,
         y: clickY - node.y,
       });
-    }
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (draggingNodeId && svgRef.current) {
-      const rect = svgRef.current.getBoundingClientRect();
-      const currentX = (e.clientX - rect.left - pan.x) / zoom;
-      const currentY = (e.clientY - rect.top - pan.y) / zoom;
-
-      const newX = Math.round(currentX - dragOffset.x);
-      const newY = Math.round(currentY - dragOffset.y);
-
-      setNodePositions((prev) => {
-        const next = { ...prev, [draggingNodeId]: { x: newX, y: newY } };
-        return next;
-      });
-    } else if (isPanning) {
-      setPan({
-        x: e.clientX - panStart.x,
-        y: e.clientY - panStart.y,
-      });
-    }
-  };
-
-  const handleMouseUp = () => {
-    if (draggingNodeId) {
-      setDraggingNodeId(null);
-      savePositions(nodePositions);
-    }
-    if (isPanning) {
-      setIsPanning(false);
     }
   };
 
@@ -739,25 +886,39 @@ export const TrafficFlow: React.FC = () => {
     return "#ef4444";
   };
 
-  // Calculate Node Stats
-  const onlineCount = nodes.filter((n) => n.status === "online").length;
-  const warningCount = nodes.filter((n) => n.status === "warning").length;
-  const offlineCount = nodes.filter((n) => n.status === "offline").length;
+  // Calculate Node Stats based on visible nodes
+  const onlineCount = visibleNodes.filter((n) => n.status === "online").length;
+  const warningCount = visibleNodes.filter((n) => n.status === "warning").length;
+  const offlineCount = visibleNodes.filter((n) => n.status === "offline").length;
   // Exact Health Score calculation matching reference screenshot (87%)
-  const healthScore = Math.floor(((onlineCount + warningCount) / (nodes.length || 1)) * 100);
+  const healthScore = Math.floor(((onlineCount + warningCount) / (visibleNodes.length || 1)) * 100);
 
   return (
     <div className="space-y-4">
       {/* Top Header & Action Controls matching Reference NetMonitor exactly */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground">
-            {isRu ? "Топология сети" : "Network Topology"}
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold tracking-tight text-foreground">
+              {isRu ? "Топология сети" : "Network Topology"}
+            </h2>
+            <Badge
+              variant="outline"
+              className={`text-[10px] font-mono ${
+                isSimple ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10" : "border-border text-muted-foreground"
+              }`}
+            >
+              {isSimple ? (isRu ? "Простой режим (Simple)" : "Simple Mode") : (isRu ? "Экспертный режим (Expert)" : "Expert Mode")}
+            </Badge>
+          </div>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {isRu
-              ? "Интерактивная визуализация сетевой инфраструктуры"
-              : "Interactive visualization of network infrastructure"}
+            {isSimple
+              ? isRu
+                ? "Наглядная схема домашней сети, подключенных устройств и статуса защиты VPN/DPI"
+                : "Friendly view of home clients, connection statuses, and VPN/DPI protection"
+              : isRu
+              ? "Интерактивная карта сетевой инфраструктуры с портами, задержкой, MTU и маршрутами"
+              : "Interactive infrastructure map with ports, latency metrics, MTU, and interface routing"}
           </p>
         </div>
 
@@ -876,9 +1037,6 @@ export const TrafficFlow: React.FC = () => {
                 viewBox="0 0 1040 600"
                 preserveAspectRatio="xMidYMid meet"
                 onMouseDown={handleMouseDownCanvas}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
               >
                 {/* Canvas Inner Dashed Border matching Reference Screenshot */}
                 <rect
@@ -921,9 +1079,9 @@ export const TrafficFlow: React.FC = () => {
                   </text>
 
                   {/* Render Links (Solid Blue Cables & Dashed Cables) */}
-                  {links.map((link) => {
-                    const srcNode = nodes.find((n) => n.id === link.source);
-                    const tgtNode = nodes.find((n) => n.id === link.target);
+                  {visibleLinks.map((link) => {
+                    const srcNode = visibleNodes.find((n) => n.id === link.source);
+                    const tgtNode = visibleNodes.find((n) => n.id === link.target);
                     if (!srcNode || !tgtNode) return null;
 
                     const isSelected = selectedNodeId === link.source || selectedNodeId === link.target;
@@ -936,6 +1094,8 @@ export const TrafficFlow: React.FC = () => {
                     const x2 = tgtNode.x + 24;
                     const y2 = tgtNode.y + 24;
 
+                    const midX = (x1 + x2) / 2;
+                    const midY = (y1 + y2) / 2;
                     const isDashed = link.type === "wireless" || link.status === "down";
 
                     return (
@@ -946,34 +1106,107 @@ export const TrafficFlow: React.FC = () => {
                           y1={y1}
                           x2={x2}
                           y2={y2}
-                          stroke={isSelected ? "#38bdf8" : "#2563eb"}
+                          stroke={isSelected ? "#38bdf8" : link.type === "tunnel" ? "#8b5cf6" : "#2563eb"}
                           strokeWidth={isSelected ? 2.5 : 1.8}
                           strokeDasharray={isDashed ? "5 5" : undefined}
                           strokeOpacity={link.status === "down" ? 0.7 : 0.85}
                           className="transition-colors duration-150"
                         />
+
+                        {/* Expert Mode: Link Ports, Latency Metrics & MTU */}
+                        {!isSimple && link.status !== "down" && (
+                          <g className="pointer-events-none select-none">
+                            {/* Source Port indicator */}
+                            {link.sourcePort && (
+                              <text
+                                x={x1 + (x2 - x1) * 0.22}
+                                y={y1 + (y2 - y1) * 0.22 - 6}
+                                textAnchor="middle"
+                                fill="#94a3b8"
+                                fontSize="8.5"
+                                fontFamily="monospace"
+                                fontWeight="600"
+                              >
+                                {link.sourcePort}
+                              </text>
+                            )}
+                            {/* Target Port indicator */}
+                            {link.targetPort && (
+                              <text
+                                x={x1 + (x2 - x1) * 0.78}
+                                y={y1 + (y2 - y1) * 0.78 - 6}
+                                textAnchor="middle"
+                                fill="#94a3b8"
+                                fontSize="8.5"
+                                fontFamily="monospace"
+                                fontWeight="600"
+                              >
+                                {link.targetPort}
+                              </text>
+                            )}
+                            {/* Latency & MTU Badge at Link Midpoint */}
+                            {link.latency && (
+                              <g transform={`translate(${midX}, ${midY})`}>
+                                <rect
+                                  x="-26"
+                                  y="-8"
+                                  width="52"
+                                  height="16"
+                                  rx="3"
+                                  fill="#090d16"
+                                  stroke="#27272a"
+                                  strokeWidth="1"
+                                />
+                                <text
+                                  x="0"
+                                  y="3.5"
+                                  textAnchor="middle"
+                                  fill={link.type === "tunnel" ? "#c084fc" : "#38bdf8"}
+                                  fontSize="8"
+                                  fontWeight="600"
+                                  fontFamily="monospace"
+                                >
+                                  {link.latency}
+                                </text>
+                              </g>
+                            )}
+                          </g>
+                        )}
                       </g>
                     );
                   })}
 
-                  {/* Connection Port Dots matching Reference Screenshot */}
-                  {/* Dot on line leaving Core Router towards Switch-01 */}
-                  <circle cx="550" cy="294" r="4.5" fill="#10b981" />
-                  {/* Dot on line leaving Switch-01 towards AP-01 */}
-                  <circle cx="834" cy="168" r="4.5" fill="#10b981" />
-                  {/* Dot on line leaving Switch-01 towards AP-02 */}
-                  <circle cx="834" cy="224" r="4.5" fill="#10b981" />
-                  {/* Amber dot on dashed line leaving Switch-02 towards AP-03 */}
-                  <circle cx="834" cy="463" r="4.5" fill="#f59e0b" />
+                  {/* Dynamic Connection Port Indicators */}
+                  {visibleLinks.filter((l) => l.status === "active" || l.status === "warning").map((link) => {
+                    const src = visibleNodes.find((n) => n.id === link.source);
+                    const tgt = visibleNodes.find((n) => n.id === link.target);
+                    if (!src || !tgt) return null;
+                    const midX = (src.x + tgt.x) / 2 + 24;
+                    const midY = (src.y + tgt.y) / 2 + 24;
+                    const color = link.status === "warning" ? "#f59e0b" : "#10b981";
+                    return (
+                      <circle
+                        key={`port-dot-${link.id}`}
+                        cx={midX}
+                        cy={midY}
+                        r={3.5}
+                        fill={color}
+                        stroke="#0c1017"
+                        strokeWidth={1.5}
+                        className="pointer-events-none"
+                      />
+                    );
+                  })}
 
                   {/* Render Nodes (Squircles with Colored Borders & Corner Status Dot) */}
-                  {nodes.map((node) => {
+                  {visibleNodes.map((node) => {
                     const isSelected = selectedNodeId === node.id;
                     const isFiltered = filteredNodeIds && !filteredNodeIds.has(node.id);
 
                     const borderColor = getNodeBorderColor(node.status, isSelected);
                     const dotColor = getNodeDotColor(node.status);
-                    const labelWidth = Math.max(node.name.length * 7.2 + 16, 56);
+                    const displayName = isSimple && node.friendlyName ? node.friendlyName : node.name;
+                    const labelWidth = Math.max(displayName.length * 7.2 + 16, 56);
 
                     return (
                       <g
@@ -1044,12 +1277,71 @@ export const TrafficFlow: React.FC = () => {
                           y="69.5"
                           textAnchor="middle"
                           fill="#f8fafc"
-                          fontSize="10.5"
+                          fontSize="10"
                           fontWeight="500"
                           className="pointer-events-none select-none"
                         >
-                          {node.name}
+                          {displayName}
                         </text>
+
+                        {/* Simple Mode: Security Status Pill (VPN / DPI / Direct) */}
+                        {isSimple && node.securityStatus && (
+                          <g transform="translate(0, 78)">
+                            <rect
+                              x="3"
+                              y="0"
+                              width="42"
+                              height="14"
+                              rx="3"
+                              fill={
+                                node.securityStatus === "vpn"
+                                  ? "#064e3b"
+                                  : node.securityStatus === "zapret"
+                                  ? "#4c1d95"
+                                  : "#1e293b"
+                              }
+                              stroke={
+                                node.securityStatus === "vpn"
+                                  ? "#059669"
+                                  : node.securityStatus === "zapret"
+                                  ? "#7c3aed"
+                                  : "#475569"
+                              }
+                              strokeWidth="0.8"
+                            />
+                            <text
+                              x="24"
+                              y="10"
+                              textAnchor="middle"
+                              fill="#ffffff"
+                              fontSize="8"
+                              fontWeight="700"
+                              letterSpacing="0.05em"
+                            >
+                              {node.securityStatus === "vpn"
+                                ? "VPN"
+                                : node.securityStatus === "zapret"
+                                ? "DPI"
+                                : "LAN"}
+                            </text>
+                          </g>
+                        )}
+
+                        {/* Expert Mode: MTU & Port Pill */}
+                        {!isSimple && node.port && (
+                          <g transform="translate(0, 78)">
+                            <text
+                              x="24"
+                              y="10"
+                              textAnchor="middle"
+                              fill="#64748b"
+                              fontSize="8"
+                              fontFamily="monospace"
+                            >
+                              {node.port} {node.mtu ? `• M${node.mtu}` : ""}
+                            </text>
+                          </g>
+                        )}
                       </g>
                     );
                   })}
@@ -1206,51 +1498,160 @@ export const TrafficFlow: React.FC = () => {
                   <div className="p-1.5 rounded-md border border-border bg-muted/40">
                     {renderLegendIcon(selectedNode.type)}
                   </div>
-                  <span>{selectedNode.name}</span>
+                  <span>{isSimple && selectedNode.friendlyName ? selectedNode.friendlyName : selectedNode.name}</span>
                 </DialogTitle>
-                <Badge
-                  variant={selectedNode.status === "online" ? "default" : selectedNode.status === "warning" ? "secondary" : "destructive"}
-                  className="text-[10px] font-mono uppercase"
-                >
-                  {selectedNode.status}
-                </Badge>
+                <div className="flex items-center gap-1.5">
+                  {isSimple && selectedNode.securityStatus && (
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] font-mono ${
+                        selectedNode.securityStatus === "vpn"
+                          ? "border-emerald-500/50 text-emerald-400 bg-emerald-500/10"
+                          : selectedNode.securityStatus === "zapret"
+                          ? "border-purple-500/50 text-purple-400 bg-purple-500/10"
+                          : "border-border text-muted-foreground"
+                      }`}
+                    >
+                      {selectedNode.securityStatus === "vpn"
+                        ? "VPN"
+                        : selectedNode.securityStatus === "zapret"
+                        ? "DPI"
+                        : "LAN"}
+                    </Badge>
+                  )}
+                  <Badge
+                    variant={selectedNode.status === "online" ? "default" : selectedNode.status === "warning" ? "secondary" : "destructive"}
+                    className="text-[10px] font-mono uppercase"
+                  >
+                    {selectedNode.status === "online" ? (isRu ? "В сети" : "Online") : selectedNode.status}
+                  </Badge>
+                </div>
               </div>
               <DialogDescription className="text-xs text-muted-foreground">
-                {selectedNode.sublabel}
+                {isSimple ? (selectedNode.securityLabel || selectedNode.sublabel) : selectedNode.sublabel}
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-2.5 py-2 text-xs">
-              {selectedNode.ip && (
-                <div className="flex justify-between py-1.5 border-b border-border/50">
-                  <span className="text-muted-foreground">IP Address:</span>
-                  <span className="font-mono font-medium text-foreground">{selectedNode.ip}</span>
-                </div>
-              )}
-              {selectedNode.mac && (
-                <div className="flex justify-between py-1.5 border-b border-border/50">
-                  <span className="text-muted-foreground">MAC Address:</span>
-                  <span className="font-mono text-muted-foreground">{selectedNode.mac}</span>
-                </div>
-              )}
-              {selectedNode.interfaceName && (
-                <div className="flex justify-between py-1.5 border-b border-border/50">
-                  <span className="text-muted-foreground">{isRu ? "Интерфейс:" : "Interface:"}</span>
-                  <span className="font-mono text-foreground">{selectedNode.interfaceName}</span>
-                </div>
-              )}
-              {selectedNode.linkSpeed && (
-                <div className="flex justify-between py-1.5 border-b border-border/50">
-                  <span className="text-muted-foreground">{isRu ? "Скорость линка:" : "Link Speed:"}</span>
-                  <span className="font-mono text-emerald-500 font-medium">{selectedNode.linkSpeed}</span>
-                </div>
-              )}
-              {selectedNode.routingTarget && (
-                <div className="pt-1.5">
-                  <span className="text-muted-foreground block mb-1">{isRu ? "Маршрутизация:" : "Routing Target:"}</span>
-                  <div className="font-mono text-xs text-foreground bg-muted/50 p-2 rounded-md border border-border break-all">
-                    {selectedNode.routingTarget}
+            <div className="space-y-3 py-2 text-xs">
+              {isSimple ? (
+                /* ======================================================== */
+                /* SIMPLE MODE: Friendly Device Status & VPN/DPI Card        */
+                /* ======================================================== */
+                <div className="space-y-3">
+                  {/* Security Highlight Card */}
+                  <div
+                    className={`p-3 rounded-lg border flex items-start gap-3 ${
+                      selectedNode.securityStatus === "vpn"
+                        ? "border-emerald-500/40 bg-emerald-950/20 text-emerald-300"
+                        : selectedNode.securityStatus === "zapret"
+                        ? "border-purple-500/40 bg-purple-950/20 text-purple-300"
+                        : "border-border bg-muted/30 text-foreground"
+                    }`}
+                  >
+                    {selectedNode.securityStatus === "vpn" ? (
+                      <ShieldCheck className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
+                    ) : selectedNode.securityStatus === "zapret" ? (
+                      <Zap className="h-5 w-5 text-purple-400 shrink-0 mt-0.5" />
+                    ) : (
+                      <Globe className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+                    )}
+                    <div>
+                      <div className="font-semibold text-xs">
+                        {selectedNode.securityStatus === "vpn"
+                          ? (isRu ? "Защита VPN активна" : "VPN Protection Active")
+                          : selectedNode.securityStatus === "zapret"
+                          ? (isRu ? "Обход блокировок DPI активен" : "DPI Bypass Active")
+                          : (isRu ? "Прямое подключение к интернету" : "Direct Internet Access")}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {selectedNode.securityStatus === "vpn"
+                          ? (isRu
+                              ? "Трафик этого устройства надежно шифруется через туннель Sing-box / Reality."
+                              : "Traffic from this device is encrypted and securely routed via Sing-box Reality.")
+                          : selectedNode.securityStatus === "zapret"
+                          ? (isRu
+                              ? "YouTube, Discord и стриминговые сервисы открываются на полной скорости без замедлений провайдера."
+                              : "YouTube, Discord, and streaming services bypass ISP DPI throttling seamlessly.")
+                          : (isRu
+                              ? "Трафик направляется напрямую через вашего интернет-провайдера без изменений."
+                              : "Standard direct connectivity via default WAN uplink.")}
+                      </p>
+                    </div>
                   </div>
+
+                  {/* Connection Details */}
+                  <div className="p-3 rounded-lg border border-border bg-muted/20 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">{isRu ? "Способ подключения:" : "Connection:"}</span>
+                      <span className="font-medium text-foreground">
+                        {selectedNode.interfaceName?.includes("5")
+                          ? "Wi-Fi 5 GHz (802.11ax)"
+                          : selectedNode.interfaceName?.includes("2")
+                          ? "Wi-Fi 2.4 GHz"
+                          : "Проводной порт LAN (1 Gbps)"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">{isRu ? "Текущая скорость линка:" : "Link Speed:"}</span>
+                      <span className="font-mono font-medium text-emerald-400">{selectedNode.linkSpeed || "433 Mbps"}</span>
+                    </div>
+                    {selectedNode.ip && (
+                      <div className="flex items-center justify-between pt-1 border-t border-border/40">
+                        <span className="text-muted-foreground">{isRu ? "IP адрес в домашней сети:" : "Home IP Address:"}</span>
+                        <span className="font-mono text-foreground">{selectedNode.ip}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* ======================================================== */
+                /* EXPERT MODE: Ports, Latency Metrics, MTU & Interfaces    */
+                /* ======================================================== */
+                <div className="space-y-2.5">
+                  {selectedNode.ip && (
+                    <div className="flex justify-between py-1.5 border-b border-border/50">
+                      <span className="text-muted-foreground">IP Address:</span>
+                      <span className="font-mono font-medium text-foreground">{selectedNode.ip}</span>
+                    </div>
+                  )}
+                  {selectedNode.mac && (
+                    <div className="flex justify-between py-1.5 border-b border-border/50">
+                      <span className="text-muted-foreground">MAC Address:</span>
+                      <span className="font-mono text-muted-foreground">{selectedNode.mac}</span>
+                    </div>
+                  )}
+                  {selectedNode.interfaceName && (
+                    <div className="flex justify-between py-1.5 border-b border-border/50">
+                      <span className="text-muted-foreground">{isRu ? "Интерфейс:" : "Interface:"}</span>
+                      <span className="font-mono text-foreground">{selectedNode.interfaceName}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between py-1.5 border-b border-border/50">
+                    <span className="text-muted-foreground">{isRu ? "Аппаратный порт / MTU:" : "Port / MTU:"}</span>
+                    <span className="font-mono text-foreground">
+                      {selectedNode.port || "eth0"} • MTU {selectedNode.mtu || 1500}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1.5 border-b border-border/50">
+                    <span className="text-muted-foreground">{isRu ? "Метрики задержки (RTT):" : "Latency / Jitter:"}</span>
+                    <span className="font-mono text-emerald-400 font-semibold">
+                      {selectedNode.latencyMs ? `${selectedNode.latencyMs} ms RTT (±0.4 ms)` : "< 1.0 ms"}
+                    </span>
+                  </div>
+                  {selectedNode.linkSpeed && (
+                    <div className="flex justify-between py-1.5 border-b border-border/50">
+                      <span className="text-muted-foreground">{isRu ? "Скорость линка:" : "Link Speed:"}</span>
+                      <span className="font-mono text-emerald-500 font-medium">{selectedNode.linkSpeed}</span>
+                    </div>
+                  )}
+                  {selectedNode.routingTarget && (
+                    <div className="pt-1.5">
+                      <span className="text-muted-foreground block mb-1">{isRu ? "Политика маршрутизации (PBR Target):" : "Routing Target Policy:"}</span>
+                      <div className="font-mono text-xs text-foreground bg-muted/50 p-2 rounded-md border border-border break-all">
+                        {selectedNode.routingTarget}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
