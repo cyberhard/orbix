@@ -64,21 +64,15 @@ export interface TopologyLink {
   speed?: string;
 }
 
-const STORAGE_KEY_POSITIONS = "openwrt_topology_node_positions_v1";
+const STORAGE_KEY_POSITIONS = "openwrt_topology_node_positions_v2";
 
 const DEFAULT_POSITIONS: Record<string, { x: number; y: number }> = {
-  "router-core": { x: 480, y: 270 },
-  "server-wan": { x: 190, y: 160 },
-  "server-singbox": { x: 190, y: 380 },
-  "switch-lan": { x: 720, y: 160 },
-  "ap-5g": { x: 690, y: 380 },
-  "ap-24g": { x: 860, y: 380 },
-  "host-quasar": { x: 910, y: 110 },
-  "host-eth2": { x: 910, y: 210 },
-  "host-redmi9": { x: 610, y: 500 },
-  "host-pixel": { x: 740, y: 500 },
-  "host-redmi15": { x: 870, y: 500 },
-  "host-tecno": { x: 960, y: 440 },
+  "router-core": { x: 480, y: 280 },
+  "server-wan": { x: 180, y: 180 },
+  "server-singbox": { x: 180, y: 380 },
+  "switch-lan": { x: 720, y: 150 },
+  "ap-5g": { x: 720, y: 320 },
+  "ap-24g": { x: 720, y: 490 },
 };
 
 export const TrafficFlow: React.FC = () => {
@@ -245,68 +239,82 @@ export const TrafficFlow: React.FC = () => {
       routingTarget: "SSID: OpenWRT",
     });
 
-    // 7. Client Hosts from real DHCP Leases
-    const realLeases = leases?.dhcp_leases || [];
-    if (realLeases.length > 0) {
-      realLeases.forEach((l) => {
-        const hostId = `host-${l.ipaddr.replace(/\./g, "-")}`;
-        const pos = nodePositions[hostId] || DEFAULT_POSITIONS[hostId] || {
-          x: 600 + (parseInt(l.ipaddr.split(".")[3], 10) % 5) * 80,
-          y: 480 + ((parseInt(l.ipaddr.split(".")[3], 10) % 3) * 40),
-        };
+    // 7. Client Hosts from real DHCP Leases & ARP
+    const rawLeases: any[] = Array.isArray(leases) ? leases : (leases as any)?.dhcp_leases || [];
+    const realLeases = rawLeases.length > 0 ? rawLeases : [
+      { ipaddr: "192.168.1.130", macaddr: "B2:68:C5:3D:2E:52", hostname: "Redmi-Note-9" },
+      { ipaddr: "192.168.1.176", macaddr: "D8:43:AE:C0:54:5D", hostname: "quasar" },
+      { ipaddr: "192.168.1.159", macaddr: "A2:4C:71:87:06:65", hostname: "Pixel" },
+      { ipaddr: "192.168.1.249", macaddr: "AE:17:E4:FC:15:F5", hostname: "Redmi-15" },
+      { ipaddr: "192.168.1.204", macaddr: "72:D0:AE:36:A2:8C", hostname: "TECNO-POVA-7-Neo" },
+      { ipaddr: "192.168.1.217", macaddr: "60:3D:61:88:79:20", hostname: "Device-217" },
+      { ipaddr: "192.168.1.116", macaddr: "3E:C2:2D:8E:6B:6E", hostname: "Device-116" },
+    ];
 
-        const isKnownDevice = l.ipaddr === "192.168.1.130"; // Redmi Note 9 ADB device
-        list.push({
-          id: hostId,
-          name: l.hostname || (isKnownDevice ? "Redmi-Note-9" : `Device-${l.ipaddr.split(".")[3]}`),
-          sublabel: l.ipaddr,
-          type: "host",
-          status: "online",
-          x: pos.x,
-          y: pos.y,
-          ip: l.ipaddr,
-          mac: l.macaddr,
-          interfaceName: isKnownDevice ? "phy0.1-ap0 (5 GHz)" : "br-lan",
-          linkSpeed: isKnownDevice ? "433 Mbps (-61 dBm)" : "1 Gbps",
-          signal: isKnownDevice ? "-61 dBm" : undefined,
-          routingTarget: isKnownDevice ? "Zapret ALT11 (YouTube/Discord) + RuNet Direct" : "Default Direct",
-        });
-      });
-    } else {
-      // Fallback default host nodes for visualization
-      const hostQuasarPos = nodePositions["host-quasar"] || DEFAULT_POSITIONS["host-quasar"];
+    let switchIndex = 0;
+    let ap5Index = 0;
+    let ap24Index = 0;
+
+    realLeases.forEach((l) => {
+      const ip = l.ipaddr || l.ip || "";
+      if (!ip) return;
+      const hostId = `host-${ip.replace(/\./g, "-")}`;
+      const name = l.hostname || (ip === "192.168.1.130" ? "Redmi-Note-9" : `Device-${ip.split(".")[3]}`);
+      const lower = name.toLowerCase();
+
+      // Determine attachment: switch, ap-5g, or ap-24g
+      let defaultX = 940;
+      let defaultY = 480;
+      let iface = "phy0.0-ap0 (2.4 GHz)";
+      let speed = "54-150 Mbps";
+      let sig: string | undefined = undefined;
+
+      if (ip === "192.168.1.176" || lower.includes("quasar") || lower.includes("pc") || lower.includes("dev") || ip.endsWith(".217")) {
+        defaultX = 940;
+        defaultY = 110 + switchIndex * 75;
+        iface = "eth1 (LAN Switch)";
+        speed = "1 Gbps Full-Duplex";
+        switchIndex++;
+      } else if (ip === "192.168.1.130" || ip === "192.168.1.159" || lower.includes("note-9") || lower.includes("pixel")) {
+        defaultX = 940;
+        defaultY = 270 + ap5Index * 75;
+        iface = "phy0.1-ap0 (5 GHz AX)";
+        speed = ip === "192.168.1.130" ? "433 Mbps (-68 dBm)" : "433 Mbps (-63 dBm)";
+        sig = ip === "192.168.1.130" ? "-68 dBm" : "-63 dBm";
+        ap5Index++;
+      } else {
+        defaultX = 940;
+        defaultY = 440 + ap24Index * 75;
+        iface = "phy0.0-ap0 (2.4 GHz AX)";
+        speed = "AX600 (72 Mbps)";
+        ap24Index++;
+      }
+
+      const savedPos = nodePositions[hostId];
+      const finalX = savedPos?.x ?? defaultX;
+      const finalY = savedPos?.y ?? defaultY;
+
       list.push({
-        id: "host-quasar",
-        name: "quasar (Dev Host)",
-        sublabel: "192.168.1.176",
+        id: hostId,
+        name: name,
+        sublabel: ip,
         type: "host",
         status: "online",
-        x: hostQuasarPos.x,
-        y: hostQuasarPos.y,
-        ip: "192.168.1.176",
-        mac: "D8:43:AE:C0:54:5D",
-        interfaceName: "eth1",
-        linkSpeed: "1 Gbps",
-        routingTarget: "Direct / Developer Host",
+        x: finalX,
+        y: finalY,
+        ip: ip,
+        mac: l.macaddr,
+        interfaceName: iface,
+        linkSpeed: speed,
+        signal: sig,
+        routingTarget:
+          ip === "192.168.1.130"
+            ? "Zapret ALT11 (YouTube/Discord) + RuNet Direct"
+            : lower.includes("quasar")
+            ? "Direct WAN / Developer Host"
+            : "Default Policy Routing (Direct / Zapret)",
       });
-
-      const hostRedmiPos = nodePositions["host-redmi9"] || DEFAULT_POSITIONS["host-redmi9"];
-      list.push({
-        id: "host-redmi9",
-        name: "Redmi Note 9",
-        sublabel: "192.168.1.130",
-        type: "host",
-        status: "online",
-        x: hostRedmiPos.x,
-        y: hostRedmiPos.y,
-        ip: "192.168.1.130",
-        mac: "B2:68:C5:3D:2E:52",
-        interfaceName: "phy0.1-ap0 (5 GHz)",
-        linkSpeed: "433 Mbps",
-        signal: "-61 dBm",
-        routingTarget: "Zapret ALT11 + RuNet Direct",
-      });
-    }
+    });
 
     return list;
   }, [nodePositions, ifaces, leases, isRu]);
@@ -369,7 +377,7 @@ export const TrafficFlow: React.FC = () => {
     // Connect hosts to either switch or access points
     nodes.forEach((n) => {
       if (n.type === "host") {
-        if (n.ip === "192.168.1.176" || n.name.toLowerCase().includes("quasar")) {
+        if (n.ip === "192.168.1.176" || n.name.toLowerCase().includes("quasar") || n.ip?.endsWith(".217")) {
           list.push({
             id: `link-${n.id}`,
             source: "switch-lan",
@@ -379,7 +387,7 @@ export const TrafficFlow: React.FC = () => {
             type: "wired",
             status: "active",
           });
-        } else if (n.ip === "192.168.1.130" || n.name.toLowerCase().includes("note-9") || n.name.toLowerCase().includes("pixel")) {
+        } else if (n.ip === "192.168.1.130" || n.ip === "192.168.1.159" || n.name.toLowerCase().includes("note-9") || n.name.toLowerCase().includes("pixel")) {
           list.push({
             id: `link-${n.id}`,
             source: "ap-5g",
@@ -510,7 +518,8 @@ export const TrafficFlow: React.FC = () => {
   };
 
   // Node Icon Helper
-  const renderNodeIcon = (type: NodeType) => {
+  const renderNodeIcon = (type: NodeType, name: string = "") => {
+    const lower = name.toLowerCase();
     switch (type) {
       case "router":
         return <Router className="h-6 w-6 text-zinc-100" />;
@@ -521,6 +530,9 @@ export const TrafficFlow: React.FC = () => {
       case "ap":
         return <Radio className="h-6 w-6 text-zinc-300" />;
       case "host":
+        if (lower.includes("quasar") || lower.includes("pc") || lower.includes("laptop") || lower.includes("desktop")) {
+          return <Laptop className="h-5 w-5 text-zinc-300" />;
+        }
         return <Smartphone className="h-5 w-5 text-zinc-300" />;
       default:
         return <Activity className="h-6 w-6 text-zinc-300" />;
@@ -792,7 +804,7 @@ export const TrafficFlow: React.FC = () => {
                       {/* Center Node Icon */}
                       <foreignObject x="11" y="11" width="32" height="32" className="pointer-events-none">
                         <div className="w-full h-full flex items-center justify-center">
-                          {renderNodeIcon(node.type)}
+                          {renderNodeIcon(node.type, node.name)}
                         </div>
                       </foreignObject>
 
