@@ -1,6 +1,6 @@
 #!/bin/bash
-# OpenWrt Modern Panel - Reproducible Firmware Generator via OpenWrt ImageBuilder
-# Generates ready-to-flash Factory and Sysupgrade images with Modern Panel preinstalled.
+# ORBIX - Reproducible Firmware Generator via OpenWrt ImageBuilder
+# Generates ready-to-flash Factory and Sysupgrade images with ORBIX preinstalled.
 
 set -e
 

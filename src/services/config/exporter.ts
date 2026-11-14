@@ -1,4 +1,4 @@
-// Configuration Exporter for OpenWrt Modern Panel
+// Configuration Exporter for ORBIX
 // Extracts all managed router settings into portable, versioned JSON.
 
 import {

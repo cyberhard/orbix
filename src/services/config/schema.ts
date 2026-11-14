@@ -1,4 +1,4 @@
-// Unified Portable JSON Configuration Schema for OpenWrt Modern Panel
+// Unified Portable JSON Configuration Schema for ORBIX
 // Schema Version: 1
 
 import { NetworkPolicy, DomainCategory, DeviceGroup } from "@/services/policy-engine/types";

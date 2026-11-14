@@ -1,6 +1,6 @@
-# OpenWrt Modern Admin Panel — MCP Server Integration Guide
+# ORBIX — MCP Server Integration Guide
 
-This document describes the Model Context Protocol (MCP) server integrated into the OpenWrt Modern Admin Panel project. The MCP server allows LLM assistants (e.g. Claude Desktop, Cursor, Antigravity, Cline) to query router telemetry, inspect network interfaces, manage Policy-Based Routing (PBR) rules, diagnose Zapret2 DPI desynchronization strategies, and apply UCI changes safely.
+This document describes the Model Context Protocol (MCP) server integrated into the ORBIX platform. The MCP server allows LLM assistants (e.g. Claude Desktop, Cursor, Antigravity, Cline) to query router telemetry, inspect network interfaces, manage Policy-Based Routing (PBR) rules, diagnose Zapret2 DPI desynchronization strategies, and apply UCI changes safely.
 
 ---
 
@@ -77,7 +77,7 @@ Add this to your Claude Desktop configuration file:
       "command": "node",
       "args": [
         "-e",
-        "require('child_process').spawn('npx', ['tsx', '/path/to/openwrt-modern-panel/mcp-server/src/index.ts'], { stdio: 'inherit' })"
+        "require('child_process').spawn('npx', ['tsx', '/path/to/orbix/mcp-server/src/index.ts'], { stdio: 'inherit' })"
       ],
       "env": {
         "OPENWRT_HOST": "192.168.1.1",
@@ -99,7 +99,7 @@ Or using direct `npx`:
       "args": [
         "-y",
         "tsx",
-        "/absolute/path/to/openwrt-modern-panel/mcp-server/src/index.ts"
+        "/absolute/path/to/orbix/mcp-server/src/index.ts"
       ],
       "env": {
         "OPENWRT_HOST": "192.168.1.1",

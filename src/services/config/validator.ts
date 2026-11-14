@@ -1,4 +1,4 @@
-// Strict JSON Schema and Content Validator for OpenWrt Modern Panel Configs
+// Strict JSON Schema and Content Validator for ORBIX Configs
 
 import {
   CURRENT_SCHEMA_VERSION,

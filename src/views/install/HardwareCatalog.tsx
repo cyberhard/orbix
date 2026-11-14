@@ -92,7 +92,7 @@ export const HARDWARE_CATALOG: DeviceEntry[] = [
     sysupgradeSha256: "2198abce7281938201948ba9e1823901bca74819e01823749810237489102384",
     oemFlashingMethod: "Веб-интерфейс Cudy: Firmware Upgrade -> Загрузить openwrt-...-factory.bin",
     recoveryMethod: "TFTP Recovery: IP сервера 192.168.1.66, файл recovery.bin",
-    notesRu: "Отличный бюджетный роутер Wi-Fi 6. Полная поддержка всех функций Modern Panel.",
+    notesRu: "Отличный бюджетный роутер Wi-Fi 6. Полная поддержка всех функций ORBIX.",
   },
   {
     id: "xiaomi-ax3000t",
@@ -205,7 +205,7 @@ export const HardwareCatalog: React.FC = () => {
           <p className="text-xs text-zinc-400 mt-0.5">
             {isRu
               ? "Официальные готовые сборки OpenWrt с предустановленной панелью, проверка совместимости и инструкции по установке"
-              : "Pre-built OpenWrt firmware images with Modern Panel preinstalled, checksums, and flashing guides"}
+              : "Pre-built OpenWrt firmware images with ORBIX preinstalled, checksums, and flashing guides"}
           </p>
         </div>
       </div>
@@ -380,7 +380,7 @@ export const HardwareCatalog: React.FC = () => {
               <div className="p-4 bg-zinc-900/40 border border-zinc-800 rounded-xl space-y-2">
                 <div className="font-bold text-zinc-200 flex items-center gap-2">
                   <div className="h-6 w-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-mono">4</div>
-                  <span>{isRu ? "Первый запуск Modern Panel" : "First Launch & Setup"}</span>
+                  <span>{isRu ? "Первый запуск ORBIX" : "First Launch & Setup"}</span>
                 </div>
                 <p className="text-zinc-400 leading-relaxed">
                   {isRu
@@ -435,7 +435,7 @@ export const HardwareCatalog: React.FC = () => {
                 <span>{selectedDevice.brand} {selectedDevice.model} ({selectedDevice.revision})</span>
               </DialogTitle>
               <DialogDescription className="text-xs text-zinc-400">
-                {isRu ? "Файлы прошивки OpenWrt с предустановленной панелью" : "Pre-built OpenWrt images with Modern Panel"}
+                {isRu ? "Файлы прошивки OpenWrt с предустановленным ORBIX" : "Pre-built OpenWrt images with ORBIX"}
               </DialogDescription>
             </DialogHeader>
 

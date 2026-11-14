@@ -1,6 +1,6 @@
 # Policy-Based Routing with Zapret2 (DPI Circumvention)
 
-This document provides a comprehensive guide to the integration between **Zapret2 (`nfqws` / `tpws`)** and OpenWrt's **Policy-Based Routing (PBR)** subsystem within the Modern Admin Panel.
+This document provides a comprehensive guide to the integration between **Zapret2 (`nfqws` / `tpws`)** and OpenWrt's **Policy-Based Routing (PBR)** subsystem within ORBIX.
 
 ---
 
@@ -96,7 +96,7 @@ config policy
 
 ---
 
-## 4. Configuring via the Modern Admin Panel
+## 4. Configuring via ORBIX
 
 1. Open the **Policy Routing (PBR)** tab in the sidebar (`Маршрутизация (PBR)` in Russian).
 2. Review the active Zapret banner:

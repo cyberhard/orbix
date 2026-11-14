@@ -8,9 +8,17 @@
 [![Bundle Size](https://img.shields.io/badge/Bundle%20Size-~115%20KB%20gz-success.svg)](#)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
+[**Читать на русском (README.ru.md)**](README.ru.md)
+
 A next-generation, high-performance web administration interface and network management platform for **OpenWrt routers**, designed with strict **shadcn/ui zinc** aesthetics. 
 
 **ORBIX** transforms OpenWrt into an intuitive, visual, and secure networking platform for both home users and network engineers. Built directly on top of OpenWrt's native **ubus**, **UCI**, and **sysfs** architecture with **zero mocks or stubs**.
+
+---
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=cyberhard/orbix&type=Date)](https://star-history.com/#cyberhard/orbix&Date)
 
 ---
 
@@ -26,9 +34,29 @@ sh -c "$(wget -qO- https://raw.githubusercontent.com/cyberhard/orbix/main/script
 
 ---
 
+## Interface Previews
+
+### 1. Interactive Network Topology & Infrastructure Map (`#/traffic`)
+Real-time Cisco Packet Tracer-style interactive topology view. Drag-and-drop nodes with live cable recalculation, port status indicators, and instant node inspection.
+![ORBIX Network Topology](docs/images/topology-macos.png)
+
+### 2. Overview Dashboard & Telemetry (`#/overview`)
+Real-time CPU, RAM, Flash, active DHCP leases with correct pluralization, WAN status, and smooth SVG throughput graph with time range selector.
+![ORBIX Overview Dashboard](docs/images/overview-macos.png)
+
+### 3. Unified Policy-Based Routing Engine (`#/policies`)
+Dual-mode policy manager (Simple Mode for beginners, Expert Mode for network architects) translating natural requirements into atomic `nftables`, `pbr`, and `zapret` rules.
+![ORBIX Policy Engine](docs/images/policies-macos.png)
+
+### 4. Hardware Catalog & Universal Firmware Portal (`#/install`)
+Pre-compiled OpenWrt images, SHA-256 checksums, and step-by-step flashing guides for MediaTek Filogic, x86/64, and Qualcomm routers.
+![ORBIX Hardware Catalog](docs/images/catalog-macos.png)
+
+---
+
 ## Key Capabilities
 
-### 1. Cisco Packet Tracer-Style Interactive Network Topology
+### 1. Interactive Network Topology (Cisco Packet Tracer Aesthetic)
 - **Interactive SVG Canvas**: Visual infrastructure map with dot-matrix grid workspace.
 - **Full Drag-and-Drop**: Reposition any node in real-time with automatic cable/link recalculation. Positions are saved persistently in `localStorage`.
 - **Live Hardware & Client Detection**: Automatically maps Core Router (`192.168.1.1`), Internet WAN (`eth0`), Sing-box VLESS (`tun0`), Switch (`eth1-eth3`), Wi-Fi 5 GHz (`phy0.1-ap0`), Wi-Fi 2.4 GHz (`phy0.0-ap0`), and all active DHCP/ARP client hosts.
@@ -47,7 +75,7 @@ sh -c "$(wget -qO- https://raw.githubusercontent.com/cyberhard/orbix/main/script
   7. **Safety Rollback Watchdog**: 75-second countdown timer reverts configuration if client connectivity is dropped.
 
 ### 3. Full Configuration JSON Backup & Migration (`#/backup`)
-- **Versioned JSON Schema** (`orbix-config` v1, backward compatible with `openwrt-modern-panel`): Covers General, Network, Devices, Policies, VPN, DNS, Zapret, Firewall, and Lists.
+- **Versioned JSON Schema** (`orbix-config` v1): Covers General, Network, Devices, Policies, VPN, DNS, Zapret, Firewall, and Lists.
 - **Safe Export vs Encrypted Full Backup**: Scrubbed secrets for public sharing or **AES-256-GCM** (PBKDF2 10k iterations) encrypted backup with pure TypeScript fallback for plain HTTP (`http://192.168.1.1`).
 - **Cross-Device Migration Engine**: Automatically resolves hardware differences and subnet conflicts when restoring to a different router model.
 - **Restoration Modes**: Merge, Replace, or Selective section restore.
@@ -78,78 +106,54 @@ ORBIX Web UI (React 19 + TypeScript + Vite 8 + Tailwind CSS + shadcn/ui zinc)
    │      ├── system / rc / service (telemetry, daemons, procd)
    │      └── circumvention (hardened ORBIX RPC backend: awg, zapret, pbr, zero-lockout watchdog)
    │
-   └── OpenWrt Host System (Linux 6.x / musl libc)
-          ├── nftables / fw4 (packet filtering & NAT)
-          ├── nfqws (Zapret2 DPI desynchronization)
-          ├── sing-box (XTLS Reality VLESS client)
-          ├── amneziawg / kmod-amneziawg (obfuscated WireGuard)
-          └── dnsmasq (split-horizon DNS & DHCP)
+   ├── Policy Routing & Security Engine
+   │      ├── Linux Kernel 6.6 / 6.12 Routing Tables & IP Rules
+   │      ├── nftables / fw4 Table Sets
+   │      ├── Zapret2 (nfqws / tpws DPI desync engine)
+   │      └── Sing-box / AmneziaWG Tunnels
+   │
+   └── OpenWrt Base System (MediaTek Filogic / x86_64 / ARM / MIPS)
 ```
 
 ---
 
 ## Documentation Suite
 
-Detailed architectural, security, configuration, and API specifications are available in [`docs/`](docs/):
+Complete technical documentation is available in the [`docs/`](docs/) directory:
 
-- **[Project Audit Report](docs/PROJECT_AUDIT.md)**: Baseline audit, component health matrix, and prioritized improvements.
-- **[Security Audit Report](docs/SECURITY_AUDIT.md)**: Detailed security assessment and remediation matrix.
-- **[Security Policy & Guidelines](docs/SECURITY.md)**: Threat model, reporting guidelines, and safe operational conventions.
-- **[System Architecture](docs/ARCHITECTURE.md)**: Core design, LuCI decoupling, and Unified Policy Engine specification.
-- **[Installation & Deployment](docs/INSTALLATION.md)**: Hardware requirements, one-line installer, and offline guides.
-- **[Hardware Compatibility](docs/COMPATIBILITY.md)**: SoC architectures, Wi-Fi 6/7 chipsets, and capability probing.
-- **[Configuration Management](docs/CONFIGURATION.md)**: Portable `orbix-config` JSON schema, encryption, and migration.
-- **[Core API Reference](docs/API.md)**: Ubus JSON-RPC interfaces, payload schemas, and method access rules.
-- **[Developer Guide](docs/DEVELOPMENT.md)**: Local development setup, design conventions, and contribution workflows.
-- **[Roadmap](docs/ROADMAP.md)**: Progress milestones, multi-WAN integration, and future distributed fleet controller.
-
----
-
-## Testing & Reliability
-
-Automated testing is configured via [Vitest](https://vitest.dev):
-
-```bash
-# Run unit and integration test suites
-npm test
-```
-
-Test suites cover:
-- Policy Compiler, category resolution, and conflict detection (`tests/policy-engine.test.ts`).
-- Schema validation, backward compatibility, crypto, and migrator (`tests/config-management.test.ts`).
-- Hardware architecture classification and radio capabilities (`tests/hal.test.ts`).
-- Input sanitization, port limits, and regex whitelisting (`tests/security-validation.test.ts`).
+- [Project Audit Matrix](docs/PROJECT_AUDIT.md) — 29-module production readiness audit.
+- [Security Vulnerability Audit](docs/SECURITY_AUDIT.md) — Audit of shell execution, RPC ACL, and rollback mechanics.
+- [Security Architecture & Threat Model](docs/SECURITY.md) — Zero-lockout guarantees, least-privilege RPC, and safe updates.
+- [Platform Architecture Specification](docs/ARCHITECTURE.md) — HAL, policy compiler, and LuCI decoupling.
+- [Universal Installation & Update Guide](docs/INSTALLATION.md) — CLI installer, offline bundle, recovery flags.
+- [Hardware Compatibility Matrix](docs/COMPATIBILITY.md) — Verified SoCs, Wi-Fi 6/7 radios, RAM requirements.
+- [Configuration Specification](docs/CONFIGURATION.md) — `orbix-config` JSON specification and AES-GCM encryption.
+- [API Reference](docs/API.md) — Complete Ubus JSON-RPC API specification.
+- [Developer Guide](docs/DEVELOPMENT.md) — Local development, mocking, vitest suite, conventions.
+- [Future Roadmap](docs/ROADMAP.md) — Multi-WAN failover, mwan3, fleet cloud controller.
 
 ---
 
-## Local Development & Building
+## Testing & Quality Assurance
 
-```bash
-# Clone repository
-git clone https://github.com/cyberhard/orbix.git
-cd orbix
+ORBIX includes a comprehensive unit and integration test suite:
 
-# Install dependencies
-npm install
-
-# Start local development server
-npm run dev
-
-# Run automated tests
+```sh
 npm test
-
-# Build production bundle
-npm run build
 ```
 
-### Deploying to Router
+```
+✓ tests/hal.test.ts (3 tests)
+✓ tests/security-validation.test.ts (4 tests)
+✓ tests/policy-engine.test.ts (5 tests)
+✓ tests/config-management.test.ts (5 tests)
 
-```bash
-tar -C dist -cf - . | ssh root@192.168.1.1 "tar -C /www -xf -"
+Test Files  4 passed (4)
+Tests       17 passed (17)
 ```
 
 ---
 
 ## License
 
-This project is licensed under the MIT License.
+MIT © [cyberhard](https://github.com/cyberhard)

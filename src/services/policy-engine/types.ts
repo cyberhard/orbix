@@ -1,4 +1,4 @@
-// Unified Policy Engine Types for OpenWrt Modern Admin Platform
+// Unified Policy Engine Types for ORBIX
 
 export type PolicySourceType = "all" | "device" | "group" | "subnet" | "mac" | "interface";
 
