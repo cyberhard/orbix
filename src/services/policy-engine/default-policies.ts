@@ -67,6 +67,28 @@ export const DEFAULT_NETWORK_POLICIES: NetworkPolicy[] = [
     },
   },
   {
+    id: "sys-policy-telegram-vpn",
+    name: "Telegram Messenger (Туннель VLESS Reality)",
+    description: "Стабильная работа Telegram, загрузка медиа и голосовые вызовы без замедлений через зарубежный VPN туннель",
+    enabled: true,
+    priority: 22,
+    isSystem: true,
+    mode: "simple",
+    source: {
+      type: "all",
+      values: [],
+    },
+    destination: {
+      type: "category",
+      values: ["category:telegram"],
+    },
+    action: {
+      type: "vpn_tunnel",
+      target: "singbox",
+      fallbackAction: "direct_wan",
+    },
+  },
+  {
     id: "sys-policy-discord-zapret",
     name: "Discord и голосовые шлюзы (Туннель VLESS Reality)",
     description: "Надёжный обход блокировок ТСПУ для discord.com и голосовых каналов WebRTC discord.media через зарубежный туннель",
