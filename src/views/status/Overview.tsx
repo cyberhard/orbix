@@ -40,7 +40,6 @@ import {
 import { formatBytes, formatUptime, pluralizeRu, pluralizeEn } from "@/lib/utils";
 import { DeviceRoutingTable } from "@/components/pbr/DeviceRoutingTable";
 import { BandwidthGraph } from "./BandwidthGraph";
-import { NetworkSecurityCard } from "@/components/security/NetworkSecurityCard";
 
 interface TrafficPoint {
   time: string;
@@ -533,9 +532,6 @@ export const Overview: React.FC = () => {
               </div>
             </CardContent>
           </Card>
-
-          {/* Network Security, Kill Switch & Leak Protection Card */}
-          <NetworkSecurityCard />
 
           {/* Main Traffic & System Chart */}
           <Card className="border-border bg-card text-card-foreground shadow-sm">

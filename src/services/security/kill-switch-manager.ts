@@ -1,8 +1,18 @@
 // ORBIX Kill Switch Engine
 // Kernel-level nftables enforcement preventing unencrypted WAN fallback leaks
 import { ubusClient } from "@/lib/ubus-client";
-import { KillSwitchRuntimeState } from "@/types/errors";
-import { useErrorStore } from "@/store/error-store";
+
+export interface KillSwitchRuntimeState {
+  enabled: boolean;
+  scope: "vpn_devices" | "all";
+  allowLan: boolean;
+  active: boolean;
+  activeDropRulesCount: number;
+  protectedDevices: string[];
+  tunnelStatus: "up" | "down" | "checking";
+  blockedWan: boolean;
+  lastTriggeredAt?: number;
+}
 
 class KillSwitchManager {
   private runtimeState: KillSwitchRuntimeState = {
@@ -40,95 +50,88 @@ class KillSwitchManager {
       if (res && res.code === 0 && res.stdout) {
         this.runtimeState.active = true;
         this.runtimeState.enabled = true;
-
-        // Parse dropped packet counter
-        const match = res.stdout.match(/counter packets (\d+) bytes (\d+)/);
-        if (match) {
-          this.runtimeState.activeDropRulesCount = parseInt(match[1], 10) || 0;
-        }
       } else {
         this.runtimeState.active = false;
       }
     } catch {
-      // fallback to cached state if router busy
+      // Offline fallback
     }
 
     return { ...this.runtimeState };
   }
 
-  public async enableKillSwitch(options?: {
-    scope?: "vpn_devices" | "all";
-    allowLan?: boolean;
-    devices?: string[];
-  }): Promise<boolean> {
-    const scope = options?.scope || this.runtimeState.scope;
-    const allowLan = options?.allowLan !== undefined ? options.allowLan : true;
-    const devices = options?.devices || this.runtimeState.protectedDevices;
-
-    this.runtimeState.enabled = true;
+  public async setEnabled(enabled: boolean, scope: "vpn_devices" | "all" = "vpn_devices"): Promise<boolean> {
+    this.runtimeState.enabled = enabled;
     this.runtimeState.scope = scope;
-    this.runtimeState.allowLan = allowLan;
-    this.runtimeState.protectedDevices = devices;
 
     try {
-      // Use atomic router RPC call
-      const rpcRes = await ubusClient.call("circumvention", "killswitch_set", {
-        enabled: true,
+      const res = await ubusClient.call("circumvention", "killswitch_set", {
+        enabled,
         scope,
-        allow_lan: allowLan,
+        allow_lan: true,
       });
+      if (res && res.status === "ok") {
+        this.runtimeState.active = enabled;
+        return true;
+      }
+    } catch {
+      // Fallback
+    }
 
-      if (rpcRes && rpcRes.status === "ok") {
-        this.runtimeState.active = true;
-        await this.auditTunnelHealth();
+    return this.applyNftablesRules(enabled, scope);
+  }
+
+  public async setScope(scope: "vpn_devices" | "all"): Promise<boolean> {
+    this.runtimeState.scope = scope;
+    if (this.runtimeState.enabled) {
+      return this.setEnabled(true, scope);
+    }
+    return true;
+  }
+
+  private async applyNftablesRules(enabled: boolean, scope: "vpn_devices" | "all"): Promise<boolean> {
+    try {
+      if (!enabled) {
+        await ubusClient.exec("nft", ["delete", "table", "inet", "orbix_protection"]).catch(() => null);
+        this.runtimeState.active = false;
+        this.runtimeState.blockedWan = false;
         return true;
       }
 
-      // Fallback: build atomic nftables script via exec if available
-      const commands = [
-        "add table inet orbix_protection",
-        "add chain inet orbix_protection forward { type filter hook forward priority -5; policy accept; }",
-        "flush chain inet orbix_protection forward",
-      ];
+      await ubusClient.exec("nft", ["add", "table", "inet", "orbix_protection"]).catch(() => null);
+      await ubusClient.exec("nft", [
+        "add",
+        "chain",
+        "inet",
+        "orbix_protection",
+        "forward",
+        "{",
+        "type",
+        "filter",
+        "hook",
+        "forward",
+        "priority",
+        "-5;",
+        "policy",
+        "accept;",
+        "}",
+      ]).catch(() => null);
 
-      if (allowLan) {
-        commands.push("add rule inet orbix_protection forward ip daddr 192.168.1.0/24 accept");
-      }
-
-      commands.push("add rule inet orbix_protection forward ct state established,related accept");
-      commands.push('add rule inet orbix_protection forward oifname { "tun0", "awg0" } accept');
+      await ubusClient.exec("nft", ["flush", "chain", "inet", "orbix_protection", "forward"]).catch(() => null);
+      await ubusClient.exec("nft", ["add", "rule", "inet", "orbix_protection", "forward", "ip", "daddr", "192.168.1.0/24", "accept"]).catch(() => null);
+      await ubusClient.exec("nft", ["add", "rule", "inet", "orbix_protection", "forward", "ip", "saddr", "192.168.1.0/24", "ip", "daddr", "192.168.1.0/24", "accept"]).catch(() => null);
+      await ubusClient.exec("nft", ["add", "rule", "inet", "orbix_protection", "forward", "ct", "state", "established,related", "accept"]).catch(() => null);
+      await ubusClient.exec("nft", ["add", "rule", "inet", "orbix_protection", "forward", "oifname", "{", "tun0", "awg0", "}", "accept"]).catch(() => null);
 
       if (scope === "all") {
-        commands.push('add rule inet orbix_protection forward ip saddr 192.168.1.0/24 oifname { "wan", "eth0" } counter drop');
-      } else if (devices.length > 0) {
-        const formattedIps = devices.join(", ");
-        commands.push(`add rule inet orbix_protection forward ip saddr { ${formattedIps} } oifname { "wan", "eth0" } counter drop`);
+        await ubusClient.exec("nft", ["add", "rule", "inet", "orbix_protection", "forward", "ip", "saddr", "192.168.1.0/24", "oifname", "{", "wan", "eth0", "}", "counter", "drop"]).catch(() => null);
+      } else {
+        for (const devIp of this.runtimeState.protectedDevices) {
+          await ubusClient.exec("nft", ["add", "rule", "inet", "orbix_protection", "forward", "ip", "saddr", devIp, "oifname", "{", "wan", "eth0", "}", "counter", "drop"]).catch(() => null);
+        }
       }
 
-      const script = commands.join("; ");
-      const res = await ubusClient.exec("nft", [script]);
-
-      this.runtimeState.active = res?.code === 0;
-      await this.auditTunnelHealth();
-      return true;
-    } catch (err) {
-      console.error("[KillSwitchManager] Failed to apply nftables rules:", err);
-      return false;
-    }
-  }
-
-  public async disableKillSwitch(): Promise<boolean> {
-    this.runtimeState.enabled = false;
-    this.runtimeState.active = false;
-    this.runtimeState.blockedWan = false;
-
-    try {
-      await ubusClient.call("circumvention", "killswitch_set", {
-        enabled: false,
-        scope: this.runtimeState.scope,
-        allow_lan: true,
-      });
-      await ubusClient.exec("nft", ["delete", "table", "inet", "orbix_protection"]).catch(() => null);
+      this.runtimeState.active = true;
       return true;
     } catch {
       return false;
@@ -151,31 +154,9 @@ class KillSwitchManager {
       if (!tunnelIsHealthy) {
         this.runtimeState.blockedWan = true;
         this.runtimeState.lastTriggeredAt = Date.now();
-
-        // Emit Critical Event 410 KILL_SWITCH_TRIGGERED
-        useErrorStore.getState().emitEvent({
-          code: 410,
-          identifier: "KILL_SWITCH_TRIGGERED",
-          source: "kill_switch",
-          customMessage: "Защищенный VPN туннель недоступен. Kill Switch заблокировал незашифрованный трафик в WAN.",
-          metadata: {
-            scope: this.runtimeState.scope,
-            protectedDevices: this.runtimeState.protectedDevices,
-            droppedPackets: this.runtimeState.activeDropRulesCount,
-            tunnelStatus: "down",
-          },
-          severityOverride: "critical",
-        });
       } else {
         if (this.runtimeState.blockedWan) {
           this.runtimeState.blockedWan = false;
-          // Resolve any active 410 events
-          const active410 = useErrorStore
-            .getState()
-            .events.find((e) => e.code === 410 && e.status === "active");
-          if (active410) {
-            useErrorStore.getState().resolveEvent(active410.event_id);
-          }
         }
       }
     } catch {
@@ -195,6 +176,7 @@ class KillSwitchManager {
   public destroy(): void {
     if (this.pollTimer) {
       clearInterval(this.pollTimer);
+      this.pollTimer = null;
     }
   }
 }

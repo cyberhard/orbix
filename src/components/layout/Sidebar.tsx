@@ -87,14 +87,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, onSelectRoute, i
             },
             { id: "clients", label: t.nav.connectedClients, icon: <Users className="h-4 w-4" /> },
             { id: "wireless", label: t.nav.wirelessRadios, icon: <Radio className="h-4 w-4" /> },
-            { id: "captive", label: lang === "ru" ? "Каптив-портал" : "Captive Portal", icon: <Radio className="h-4 w-4" />, badge: "RFC 8908" },
           ],
         },
         {
           title: lang === "ru" ? "Диагностика и Система" : "Diagnostics & System",
           items: [
             { id: "diagnostics", label: t.nav.diagnostics, icon: <Terminal className="h-4 w-4" /> },
-            { id: "errors", label: lang === "ru" ? "Журнал ошибок" : "Error Log", icon: <ShieldAlert className="h-4 w-4" />, badge: "Audit" },
             { id: "bandwidth", label: t.nav.realtimeGraphs, icon: <LineChart className="h-4 w-4" /> },
             { id: "general", label: t.nav.generalSettings, icon: <Cpu className="h-4 w-4" /> },
             { id: "install", label: t.nav.installCatalog, icon: <Download className="h-4 w-4" />, badge: "Catalog" },
@@ -121,7 +119,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, onSelectRoute, i
             { id: "bandwidth", label: t.nav.realtimeGraphs, icon: <LineChart className="h-4 w-4" /> },
             { id: "clients", label: t.nav.connectedClients, icon: <Users className="h-4 w-4" /> },
             { id: "logs", label: t.nav.systemLogs, icon: <Terminal className="h-4 w-4" /> },
-            { id: "errors", label: lang === "ru" ? "Журнал ошибок" : "Error Log", icon: <ShieldAlert className="h-4 w-4" />, badge: "Audit" },
           ],
         },
         {
@@ -164,7 +161,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, onSelectRoute, i
             { id: "wireless", label: t.nav.wirelessRadios, icon: <Radio className="h-4 w-4" /> },
             { id: "dhcp", label: t.nav.dhcpDns, icon: <FileCode2 className="h-4 w-4" /> },
             { id: "firewall", label: t.nav.firewall, icon: <Shield className="h-4 w-4" /> },
-            { id: "captive", label: lang === "ru" ? "Каптив-портал" : "Captive Portal", icon: <Radio className="h-4 w-4" />, badge: "RFC 8908" },
             { id: "diagnostics", label: t.nav.diagnostics, icon: <Terminal className="h-4 w-4" /> },
           ],
         },

@@ -1,8 +1,27 @@
 // ORBIX DNS and IP Leak Protection Engine
 // Audits network routing, DNS upstreams, and rebinding vulnerabilities using live OpenWrt telemetry
 import { ubusClient } from "@/lib/ubus-client";
-import { LeakDetectionAuditResult } from "@/types/errors";
-import { useErrorStore } from "@/store/error-store";
+
+export interface LeakDetectionAuditResult {
+  timestamp: number;
+  dnsLeak: {
+    detected: boolean;
+    activeDnsServers: string[];
+    isUnencryptedIspDns: boolean;
+    details?: string;
+  };
+  ipLeak: {
+    detected: boolean;
+    defaultGatewayInterface: string;
+    protectedSubnetLeaking: boolean;
+    details?: string;
+  };
+  dnsRebinding: {
+    protected: boolean;
+    suspiciousRequestsCount: number;
+  };
+  overallStatus: "secure" | "warning" | "leaking";
+}
 
 class LeakDetector {
   private lastAuditResult: LeakDetectionAuditResult = {
@@ -50,45 +69,19 @@ class LeakDetector {
 
       const activeDnsList = parsedIspServers.length > 0 ? parsedIspServers : (ispDns.length > 0 ? ispDns : ["77.88.8.8"]);
 
-      // Check if VPN is running
-      const vless = await ubusClient.getVlessStatus();
-      const isVpnActive = Boolean(vless?.running);
-
-      // If VPN is active but clients are directed to ISP DNS servers without encryption -> DNS Leak!
-      const isIspDnsActive = activeDnsList.some((ip) => ip.startsWith("10.") || ip.startsWith("192.168."));
-      if (isVpnActive && isIspDnsActive) {
+      const isIspDnsActive = activeDnsList.some((s) => ispDns.includes(s));
+      if (isIspDnsActive) {
         dnsLeaking = true;
-        useErrorStore.getState().emitEvent({
-          code: 408,
-          identifier: "DNS_LEAK_DETECTED",
-          source: "leak_detector",
-          customMessage: `Обнаружена утечка DNS: запросы направляются на незашифрованный DNS провайдера (${activeDnsList.join(", ")}).`,
-          metadata: {
-            activeDnsServers: activeDnsList,
-            ispDnsDetected: true,
-          },
-          severityOverride: "critical",
-        });
       }
 
-      // 2. Audit IP Routing
-      const pbr = await ubusClient.call<any>("circumvention", "pbr_status", {}).catch(() => null);
-      if (isVpnActive && pbr) {
-        // Verify whether protected rules are enabled
-        const redmiRule = pbr.rules?.find((r: any) => r.id?.includes("130") || r.src_addr?.includes("130"));
-        if (redmiRule && !redmiRule.enabled) {
+      // 2. Audit IP Leak (Default Gateway vs Protected Tunnel)
+      const pbrStatus = await ubusClient.getPbrStatus();
+      if (pbrStatus && pbrStatus.enabled) {
+        const protectedClient = pbrStatus.policies?.find(
+          (p: any) => p.src_addr === "192.168.1.130" || p.name?.includes("192.168.1.130")
+        );
+        if (protectedClient && protectedClient.interface === "wan") {
           ipLeaking = true;
-          useErrorStore.getState().emitEvent({
-            code: 409,
-            identifier: "IP_LEAK_DETECTED",
-            source: "leak_detector",
-            customMessage: "Обнаружена утечка IP: защищаемое устройство 192.168.1.130 перенаправлено в открытый WAN.",
-            metadata: {
-              targetIp: "192.168.1.130",
-              routeInterface: "wan",
-            },
-            severityOverride: "critical",
-          });
         }
       }
 
@@ -96,17 +89,6 @@ class LeakDetector {
       const dhcpUci = await ubusClient.getUci("dhcp").catch(() => null);
       const dnsmasqSection = (dhcpUci?.values as any)?.["@dnsmasq[0]"] || {};
       isRebindProtected = dnsmasqSection.rebind_protection !== "0";
-
-      if (!isRebindProtected) {
-        useErrorStore.getState().emitEvent({
-          code: 606,
-          identifier: "DNS_REBINDING_BLOCKED",
-          source: "leak_detector",
-          customMessage: "Внимание: защита от DNS Rebinding атак отключена в конфигурации dnsmasq.",
-          metadata: { rebind_protection: false },
-          severityOverride: "warning",
-        });
-      }
 
       this.lastAuditResult = {
         timestamp: now,

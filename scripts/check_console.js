@@ -66,11 +66,7 @@ async function run() {
     "#/services",
     "#/tasks",
     "#/backup",
-    "#/install",
-    "#/captive",
-    "#/errors",
-    "#/errors/402?domain=vk.com",
-    "#/errors/410"
+    "#/install"
   ];
 
   for (const r of routes) {

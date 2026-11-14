@@ -38,9 +38,6 @@ import { BackupFlash } from "@/views/system/BackupFlash";
 import { HardwareCatalog } from "@/views/install/HardwareCatalog";
 import { SetupWizardModal } from "@/views/wizard/SetupWizardModal";
 import { useWizardStore } from "@/services/wizard/wizard-store";
-import { ErrorDetailView } from "@/views/errors/ErrorDetailView";
-import { ErrorHistoryView } from "@/views/errors/ErrorHistoryView";
-import { CaptivePortalView } from "@/views/captive/CaptivePortalView";
 
 export const MainLayout: React.FC = () => {
   // Read initial route from URL hash (e.g. #/subscriptions, #/wireless, #/traffic)
@@ -59,11 +56,8 @@ export const MainLayout: React.FC = () => {
     if (hash === "subs" || hash === "sub" || hash === "happ") return "subscriptions";
     if (hash === "logs" || hash === "syslog") return "logs";
     if (hash === "fw" || hash === "firewall-rules") return "firewall";
-    if (hash === "captive" || hash === "captive-portal" || hash === "portal") return "captive";
     if (hash === "install" || hash === "catalog" || hash === "firmware" || hash === "devices-catalog") return "install";
     if (hash === "wizard" || hash === "setup") return "wizard";
-    if (hash === "errors" || hash === "system/errors" || hash === "error-history" || hash === "audit") return "errors";
-    if (hash.startsWith("errors/") || hash.startsWith("error/")) return hash;
     return hash || "overview";
   };
 
@@ -139,13 +133,7 @@ export const MainLayout: React.FC = () => {
       case "backup": return t.nav.backupFlash;
       case "install": return t.nav.installCatalog;
       case "wizard": return t.nav.setupWizard;
-      case "captive": return lang === "ru" ? "Каптив-портал и HTTP-перехват" : "Captive Portal & Interception";
-      case "errors": return lang === "ru" ? "Журнал ошибок и аудит" : "Error History & Audit";
       default:
-        if (route.startsWith("errors/") || route.startsWith("error/")) {
-          const code = route.split("/")[1];
-          return `${lang === "ru" ? "Ошибка" : "Error"} ERR-${code}`;
-        }
         return t.nav.overview;
     }
   };
@@ -206,16 +194,7 @@ export const MainLayout: React.FC = () => {
         return <HardwareCatalog />;
       case "wizard":
         return <HardwareCatalog />;
-      case "captive":
-        return <CaptivePortalView />;
-      case "errors":
-        return <ErrorHistoryView />;
       default:
-        if (currentRoute.startsWith("errors/") || currentRoute.startsWith("error/")) {
-          const codeStr = currentRoute.split("/")[1];
-          const codeNum = parseInt(codeStr, 10);
-          return <ErrorDetailView errorCode={isNaN(codeNum) ? 410 : codeNum} />;
-        }
         return <Overview />;
     }
   };
