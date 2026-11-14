@@ -2,6 +2,8 @@
 
 import {
   CURRENT_SCHEMA_VERSION,
+  ORBIX_FORMAT_IDENTIFIER,
+  LEGACY_PANEL_FORMAT_IDENTIFIER,
   PANEL_FORMAT_IDENTIFIER,
   PanelExportPackage,
   PanelConfiguration,
@@ -38,9 +40,9 @@ export class ConfigValidator {
     const pkg = rawJson as Partial<PanelExportPackage>;
 
     // 1. Format Identifier Check
-    if (pkg.format !== PANEL_FORMAT_IDENTIFIER) {
+    if (pkg.format !== ORBIX_FORMAT_IDENTIFIER && pkg.format !== LEGACY_PANEL_FORMAT_IDENTIFIER) {
       errors.push(
-        `Invalid configuration format. Expected "${PANEL_FORMAT_IDENTIFIER}", received "${pkg.format || "unknown"}".`
+        `Invalid configuration format. Expected "${ORBIX_FORMAT_IDENTIFIER}" or "${LEGACY_PANEL_FORMAT_IDENTIFIER}", received "${pkg.format || "unknown"}".`
       );
     }
 

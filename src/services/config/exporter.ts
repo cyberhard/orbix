@@ -267,12 +267,14 @@ export class ConfigExporter {
     const basePackage: PanelExportPackage = {
       format: PANEL_FORMAT_IDENTIFIER,
       schema_version: CURRENT_SCHEMA_VERSION,
+      orbix_version: "1.0.0",
+      openwrt_version: sourceInfo.openwrt_version,
       exported_at: new Date().toISOString(),
       export_type: sectionsToInclude.length === 10 ? "full" : "selective",
       is_encrypted: false,
       source: sourceInfo,
       metadata: {
-        description: description || "OpenWrt Modern Panel Full System Backup",
+        description: description || "ORBIX Portable System Configuration",
         checksum_sha256: checksum,
         included_sections: sectionsToInclude,
         excluded_sections: [

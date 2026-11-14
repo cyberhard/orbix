@@ -189,8 +189,30 @@ class UbusClient {
       ]);
 
       const leases: DhcpLease[] = [];
-      const leaseList = resLeases.dhcp_leases || resLeases.leases || [];
+      let leaseList = resLeases.dhcp_leases || resLeases.leases || [];
       const seenIps = new Set<string>();
+
+      // LuCI Independence: Fallback to reading /tmp/dhcp.leases natively if luci-rpc is not installed
+      if (!Array.isArray(leaseList) || leaseList.length === 0) {
+        try {
+          const fileRes = await this.call<{ data: string }>("file", "read", { path: "/tmp/dhcp.leases" });
+          if (fileRes?.data) {
+            leaseList = fileRes.data
+              .trim()
+              .split("\n")
+              .filter(Boolean)
+              .map((line) => {
+                const parts = line.split(" ");
+                return {
+                  expires: parseInt(parts[0], 10) || 43200,
+                  mac: parts[1],
+                  ip: parts[2],
+                  hostname: parts[3],
+                };
+              });
+          }
+        } catch {}
+      }
 
       if (Array.isArray(leaseList)) {
         for (const l of leaseList) {
@@ -210,7 +232,7 @@ class UbusClient {
       }
 
       // Add active host hints that might not have a dynamic lease (static IP or ARP)
-      if (resHints) {
+      if (resHints && Object.keys(resHints).length > 0) {
         for (const [macUpper, hint] of Object.entries(resHints)) {
           const ip = hint.ipaddrs?.[0];
           if (ip && !seenIps.has(ip) && ip.startsWith("192.168.1.") && ip !== "192.168.1.1") {
@@ -223,6 +245,28 @@ class UbusClient {
             });
           }
         }
+      } else {
+        // Fallback: Read /proc/net/arp directly from kernel without LuCI
+        try {
+          const arpRes = await this.call<{ data: string }>("file", "read", { path: "/proc/net/arp" });
+          if (arpRes?.data) {
+            const lines = arpRes.data.trim().split("\n").slice(1);
+            for (const line of lines) {
+              const parts = line.split(/\s+/);
+              const ip = parts[0];
+              const mac = (parts[3] || "").toUpperCase();
+              if (ip && mac && mac !== "00:00:00:00:00:00" && !seenIps.has(ip) && ip.startsWith("192.168.1.") && ip !== "192.168.1.1") {
+                seenIps.add(ip);
+                leases.push({
+                  expires: 43200,
+                  macaddr: mac,
+                  ipaddr: ip,
+                  hostname: `Device-${ip.split(".").pop()}`,
+                });
+              }
+            }
+          }
+        } catch {}
       }
 
       return leases;
@@ -233,7 +277,44 @@ class UbusClient {
   }
 
   public async getWirelessDevices(): Promise<Record<string, WirelessDevice>> {
-    return this.call<Record<string, WirelessDevice>>("luci-rpc", "getWirelessDevices");
+    try {
+      const res = await this.call<Record<string, WirelessDevice>>("luci-rpc", "getWirelessDevices");
+      if (res && Object.keys(res).length > 0) {
+        return res;
+      }
+    } catch {}
+
+    // LuCI Independence: Fallback to native netifd `network.wireless status`
+    try {
+      const netWireless = await this.call<Record<string, any>>("network.wireless", "status");
+      const result: Record<string, WirelessDevice> = {};
+
+      for (const [radioName, radioData] of Object.entries(netWireless || {})) {
+        const config = radioData.config || {};
+        const ifaces = radioData.interfaces || [];
+        const band: "2g" | "5g" | "6g" = config.band === "5g" ? "5g" : config.band === "6g" ? "6g" : "2g";
+
+        result[radioName] = {
+          name: radioName,
+          up: Boolean(radioData.up),
+          disabled: Boolean(radioData.disabled),
+          channel: parseInt(config.channel, 10) || (band === "5g" ? 36 : 1),
+          band,
+          interfaces: ifaces.map((i: any) => ({
+            ifname: i.ifname || `${radioName}-ap`,
+            section: i.section || "",
+            ssid: i.config?.ssid || "OpenWRT",
+            bssid: "",
+            mode: i.config?.mode || "ap",
+            encryption: i.config?.encryption || "none",
+            channel: parseInt(config.channel, 10) || 1,
+          })),
+        };
+      }
+      return result;
+    } catch {
+      return {};
+    }
   }
 
   public async reloadWifi(): Promise<void> {

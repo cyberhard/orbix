@@ -11,6 +11,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "test": "vitest run",
     "mcp": "tsx mcp-server/src/index.ts"
   },
   "keywords": [],
@@ -58,6 +59,7 @@
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
-    "vite-plugin-compression2": "^2.5.4"
+    "vite-plugin-compression2": "^2.5.4",
+    "vitest": "^5.1.0"
   }
 }

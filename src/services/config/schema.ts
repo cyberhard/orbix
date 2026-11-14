@@ -5,7 +5,9 @@ import { NetworkPolicy, DomainCategory, DeviceGroup } from "@/services/policy-en
 import { VlessNode, SubscriptionMetadata, VpnOutboundGroup, KillSwitchConfig, AmneziaWgConfig } from "@/types/ubus";
 
 export const CURRENT_SCHEMA_VERSION = 1;
-export const PANEL_FORMAT_IDENTIFIER = "openwrt-modern-panel";
+export const ORBIX_FORMAT_IDENTIFIER = "orbix-config";
+export const LEGACY_PANEL_FORMAT_IDENTIFIER = "openwrt-modern-panel";
+export const PANEL_FORMAT_IDENTIFIER = ORBIX_FORMAT_IDENTIFIER;
 
 export interface CryptoMetadata {
   algorithm: "AES-GCM";
@@ -242,8 +244,10 @@ export interface PanelConfiguration {
 
 // Complete Export Package
 export interface PanelExportPackage {
-  format: typeof PANEL_FORMAT_IDENTIFIER;
+  format: typeof ORBIX_FORMAT_IDENTIFIER | typeof LEGACY_PANEL_FORMAT_IDENTIFIER;
   schema_version: number;
+  orbix_version?: string;
+  openwrt_version?: string;
   exported_at: string;
   export_type: "full" | "selective";
   is_encrypted: boolean;

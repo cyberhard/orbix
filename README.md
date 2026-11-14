@@ -47,8 +47,8 @@ sh -c "$(wget -qO- https://raw.githubusercontent.com/cyberhard/orbix/main/script
   7. **Safety Rollback Watchdog**: 75-second countdown timer reverts configuration if client connectivity is dropped.
 
 ### 3. Full Configuration JSON Backup & Migration (`#/backup`)
-- **Versioned JSON Schema** (`openwrt-modern-panel` v1): Covers General, Network, Devices, Policies, VPN, DNS, Zapret, Firewall, and Lists.
-- **Safe Export vs Encrypted Full Backup**: Scrubbed secrets for public sharing or **AES-256-GCM** (PBKDF2 100k iterations) encrypted backup with pure TypeScript fallback for plain HTTP (`http://192.168.1.1`).
+- **Versioned JSON Schema** (`orbix-config` v1, backward compatible with `openwrt-modern-panel`): Covers General, Network, Devices, Policies, VPN, DNS, Zapret, Firewall, and Lists.
+- **Safe Export vs Encrypted Full Backup**: Scrubbed secrets for public sharing or **AES-256-GCM** (PBKDF2 10k iterations) encrypted backup with pure TypeScript fallback for plain HTTP (`http://192.168.1.1`).
 - **Cross-Device Migration Engine**: Automatically resolves hardware differences and subnet conflicts when restoring to a different router model.
 - **Restoration Modes**: Merge, Replace, or Selective section restore.
 
@@ -71,25 +71,58 @@ sh -c "$(wget -qO- https://raw.githubusercontent.com/cyberhard/orbix/main/script
 ```
 ORBIX Web UI (React 19 + TypeScript + Vite 8 + Tailwind CSS + shadcn/ui zinc)
    │
-   ├── JSON-RPC / ubus HTTP API
-   │      ├── luci-rpc (getDHCPLeases, getWirelessDevices)
+   ├── JSON-RPC / ubus HTTP API Gateway
+   │      ├── file (native /tmp/dhcp.leases and /proc/net/arp fallback)
+   │      ├── network.wireless & iwinfo (native radio configuration & scanning)
    │      ├── uci (get, set, commit, apply)
-   │      └── circumvention (custom rpcd plugin: awg, zapret, pbr)
+   │      ├── system / rc / service (telemetry, daemons, procd)
+   │      └── circumvention (hardened ORBIX RPC backend: awg, zapret, pbr, zero-lockout watchdog)
    │
-   └── OpenWrt Host System (Linux 6.6 / musl libc)
+   └── OpenWrt Host System (Linux 6.x / musl libc)
           ├── nftables / fw4 (packet filtering & NAT)
           ├── nfqws (Zapret2 DPI desynchronization)
           ├── sing-box (XTLS Reality VLESS client)
-          ├── amneziawg-go / kmod-amneziawg (obfuscated WireGuard)
-          └── dnsmasq-full (split-horizon DNS & DHCP)
+          ├── amneziawg / kmod-amneziawg (obfuscated WireGuard)
+          └── dnsmasq (split-horizon DNS & DHCP)
 ```
 
 ---
 
-## Local Development & Building
+## Documentation Suite
 
-### Prerequisites
-- Node.js 20+ and npm
+Detailed architectural, security, configuration, and API specifications are available in [`docs/`](docs/):
+
+- **[Project Audit Report](docs/PROJECT_AUDIT.md)**: Baseline audit, component health matrix, and prioritized improvements.
+- **[Security Audit Report](docs/SECURITY_AUDIT.md)**: Detailed security assessment and remediation matrix.
+- **[Security Policy & Guidelines](docs/SECURITY.md)**: Threat model, reporting guidelines, and safe operational conventions.
+- **[System Architecture](docs/ARCHITECTURE.md)**: Core design, LuCI decoupling, and Unified Policy Engine specification.
+- **[Installation & Deployment](docs/INSTALLATION.md)**: Hardware requirements, one-line installer, and offline guides.
+- **[Hardware Compatibility](docs/COMPATIBILITY.md)**: SoC architectures, Wi-Fi 6/7 chipsets, and capability probing.
+- **[Configuration Management](docs/CONFIGURATION.md)**: Portable `orbix-config` JSON schema, encryption, and migration.
+- **[Core API Reference](docs/API.md)**: Ubus JSON-RPC interfaces, payload schemas, and method access rules.
+- **[Developer Guide](docs/DEVELOPMENT.md)**: Local development setup, design conventions, and contribution workflows.
+- **[Roadmap](docs/ROADMAP.md)**: Progress milestones, multi-WAN integration, and future distributed fleet controller.
+
+---
+
+## Testing & Reliability
+
+Automated testing is configured via [Vitest](https://vitest.dev):
+
+```bash
+# Run unit and integration test suites
+npm test
+```
+
+Test suites cover:
+- Policy Compiler, category resolution, and conflict detection (`tests/policy-engine.test.ts`).
+- Schema validation, backward compatibility, crypto, and migrator (`tests/config-management.test.ts`).
+- Hardware architecture classification and radio capabilities (`tests/hal.test.ts`).
+- Input sanitization, port limits, and regex whitelisting (`tests/security-validation.test.ts`).
+
+---
+
+## Local Development & Building
 
 ```bash
 # Clone repository
@@ -101,6 +134,9 @@ npm install
 
 # Start local development server
 npm run dev
+
+# Run automated tests
+npm test
 
 # Build production bundle
 npm run build
@@ -116,4 +152,4 @@ tar -C dist -cf - . | ssh root@192.168.1.1 "tar -C /www -xf -"
 
 ## License
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.

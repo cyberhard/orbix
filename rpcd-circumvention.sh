@@ -322,7 +322,7 @@ case "$1" in
 				fi
 
 				mkdir -p /etc/wireguard
-				printf "%b\n" "$CONF" > /etc/wireguard/awg0.conf
+				printf "%s\n" "$CONF" > /etc/wireguard/awg0.conf
 				chmod 600 /etc/wireguard/awg0.conf
 
 				ADDR=$(grep -i "^Address" /etc/wireguard/awg0.conf | head -n1 | cut -d'=' -f2- | tr -d ' \r\t')
@@ -518,9 +518,18 @@ case "$1" in
 
 			zapret_test_strategy)
 				read input
-				TARGET=$(echo "$input" | jsonfilter -e '@.domain' 2>/dev/null)
-				STRATEGY=$(echo "$input" | jsonfilter -e '@.strategy' 2>/dev/null)
-				if [ -z "$TARGET" ]; then TARGET="youtube.com"; fi
+				RAW_TARGET=$(echo "$input" | jsonfilter -e '@.domain' 2>/dev/null | tr -d ' \t\r\n')
+				STRATEGY=$(echo "$input" | jsonfilter -e '@.strategy' 2>/dev/null | tr -d ' \t\r\n')
+				if [ -z "$RAW_TARGET" ]; then RAW_TARGET="youtube.com"; fi
+
+				# Strict input sanitization: valid FQDN or IPv4
+				TARGET=$(printf "%s" "$RAW_TARGET" | grep -E '^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$' || true)
+				if [ -z "$TARGET" ]; then
+					TARGET=$(printf "%s" "$RAW_TARGET" | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' || true)
+				fi
+				if [ -z "$TARGET" ]; then
+					return_error "Invalid target domain or IP address format"
+				fi
 
 				# Real curl network probe measuring connect, TLS handshake, and HTTP status
 				CURL_OUT=$(curl -s -4 -o /dev/null -w "%{http_code} %{time_connect} %{time_appconnect} %{time_total}" --connect-timeout 4 -m 6 "https://$TARGET" 2>/dev/null)
@@ -628,13 +637,27 @@ case "$1" in
 
 			singbox_test_node)
 				read input
-				HOST=$(echo "$input" | jsonfilter -e '@.server' 2>/dev/null)
-				PORT=$(echo "$input" | jsonfilter -e '@.port' 2>/dev/null)
-				if [ -z "$PORT" ]; then PORT=443; fi
+				RAW_HOST=$(echo "$input" | jsonfilter -e '@.server' 2>/dev/null | tr -d ' \t\r\n')
+				RAW_PORT=$(echo "$input" | jsonfilter -e '@.port' 2>/dev/null | tr -d ' \t\r\n')
 
-				if [ -z "$HOST" ]; then
+				if [ -z "$RAW_HOST" ]; then
 					return_error "Server address parameter is required"
 				fi
+
+				# Strict host sanitization: FQDN or IPv4
+				HOST=$(printf "%s" "$RAW_HOST" | grep -E '^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$' || true)
+				if [ -z "$HOST" ]; then
+					HOST=$(printf "%s" "$RAW_HOST" | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' || true)
+				fi
+				if [ -z "$HOST" ]; then
+					return_error "Invalid server address format"
+				fi
+
+				PORT="$RAW_PORT"
+				case "$PORT" in
+					''|*[!0-9]*) PORT=443 ;;
+					*) if [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then PORT=443; fi ;;
+				esac
 
 				CURL_ERR=$(mktemp)
 				TIME=$(curl -s -4 -o /dev/null -w "%{time_connect}" --connect-timeout 3 -m 4 "http://$HOST:$PORT" 2>"$CURL_ERR")
@@ -757,9 +780,18 @@ case "$1" in
 
 			pbr_trace)
 				read input
-				TARGET=$(echo "$input" | jsonfilter -e '@.target' 2>/dev/null)
-				if [ -z "$TARGET" ]; then
+				RAW_TARGET=$(echo "$input" | jsonfilter -e '@.target' 2>/dev/null | tr -d ' \t\r\n')
+				if [ -z "$RAW_TARGET" ]; then
 					return_error "Target domain or IP parameter is required"
+				fi
+
+				# Strict validation: FQDN or IPv4
+				TARGET=$(printf "%s" "$RAW_TARGET" | grep -E '^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$' || true)
+				if [ -z "$TARGET" ]; then
+					TARGET=$(printf "%s" "$RAW_TARGET" | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' || true)
+				fi
+				if [ -z "$TARGET" ]; then
+					return_error "Invalid target domain or IP address format"
 				fi
 
 				# Real DNS resolution via resolveip or nslookup
@@ -831,9 +863,24 @@ case "$1" in
 
 			arm_rollback)
 				read input
-				TIMEOUT=$(echo "$input" | jsonfilter -e '@.timeout' 2>/dev/null)
-				[ -z "$TIMEOUT" ] && TIMEOUT=75
+				RAW_TIMEOUT=$(echo "$input" | jsonfilter -e '@.timeout' 2>/dev/null | tr -d ' \t\r\n')
+				TIMEOUT=75
+				case "$RAW_TIMEOUT" in
+					''|*[!0-9]*) TIMEOUT=75 ;;
+					*) TIMEOUT="$RAW_TIMEOUT" ;;
+				esac
 				if [ "$TIMEOUT" -le 10 ]; then TIMEOUT=75; fi
+
+				# Clean up any existing armed watchdog process before starting a new one
+				if [ -f "/tmp/uci_watchdog.pid" ]; then
+					OLD_PID=$(cat /tmp/uci_watchdog.pid 2>/dev/null | tr -d ' \r\n')
+					if [ -n "$OLD_PID" ] && [ "$OLD_PID" -gt 1 ] 2>/dev/null; then
+						OLD_CHILDREN=$(pgrep -P "$OLD_PID" 2>/dev/null)
+						[ -n "$OLD_CHILDREN" ] && kill -9 $OLD_CHILDREN 2>/dev/null
+						kill -9 "$OLD_PID" 2>/dev/null
+					fi
+					rm -f /tmp/uci_watchdog.pid
+				fi
 
 				mkdir -p /tmp/uci_rollback_backup/config /tmp/uci_rollback_backup/sing-box
 				cp -rf /etc/config/* /tmp/uci_rollback_backup/config/ 2>/dev/null
@@ -847,11 +894,11 @@ case "$1" in
 TOKEN="$1"
 TIMEOUT="$2"
 sleep "$TIMEOUT"
-if [ -f "/tmp/uci_rollback_token" ] && [ "$(cat /tmp/uci_rollback_token)" = "$TOKEN" ]; then
+if [ -f "/tmp/uci_rollback_token" ] && [ "$(cat /tmp/uci_rollback_token 2>/dev/null)" = "$TOKEN" ]; then
 	logger -t uci-watchdog "Rollback timer expired without user confirmation! Restoring safe configs..."
 	cp -rf /tmp/uci_rollback_backup/config/* /etc/config/ 2>/dev/null
 	cp -rf /tmp/uci_rollback_backup/sing-box/* /etc/sing-box/ 2>/dev/null
-	rm -rf /tmp/uci_rollback_backup /tmp/uci_rollback_token
+	rm -rf /tmp/uci_rollback_backup /tmp/uci_rollback_token /tmp/uci_watchdog.pid
 	/etc/init.d/network reload 2>/dev/null
 	/etc/init.d/firewall reload 2>/dev/null
 	/etc/init.d/pbr reload 2>/dev/null
@@ -859,9 +906,12 @@ if [ -f "/tmp/uci_rollback_token" ] && [ "$(cat /tmp/uci_rollback_token)" = "$TO
 	/etc/init.d/rpcd restart 2>/dev/null
 	logger -t uci-watchdog "Rollback restoration complete."
 fi
+rm -f /tmp/uci_watchdog.pid
 EOF_WD
 				chmod +x /tmp/uci_watchdog.sh
 				sh /tmp/uci_watchdog.sh "$TOKEN" "$TIMEOUT" >/dev/null 2>&1 &
+				WD_PID=$!
+				echo "$WD_PID" > /tmp/uci_watchdog.pid
 
 				json_init
 				json_add_string "status" "armed"
@@ -872,19 +922,30 @@ EOF_WD
 
 			confirm_rollback)
 				read input
-				USER_TOKEN=$(echo "$input" | jsonfilter -e '@.token' 2>/dev/null)
+				USER_TOKEN=$(echo "$input" | jsonfilter -e '@.token' 2>/dev/null | tr -d ' \r\n\t')
 
 				if [ ! -f "/tmp/uci_rollback_token" ]; then
 					return_error "No active rollback session armed"
 				fi
 
-				REAL_TOKEN=$(cat /tmp/uci_rollback_token 2>/dev/null | tr -d ' \r\n')
+				REAL_TOKEN=$(cat /tmp/uci_rollback_token 2>/dev/null | tr -d ' \r\n\t')
 				if [ -z "$USER_TOKEN" ] || [ "$USER_TOKEN" != "$REAL_TOKEN" ]; then
 					return_error "Invalid rollback token"
 				fi
 
+				# Deterministically kill watchdog process and all children (e.g. sleep)
+				if [ -f "/tmp/uci_watchdog.pid" ]; then
+					WD_PID=$(cat /tmp/uci_watchdog.pid 2>/dev/null | tr -d ' \r\n')
+					if [ -n "$WD_PID" ] && [ "$WD_PID" -gt 1 ] 2>/dev/null; then
+						WD_CHILDREN=$(pgrep -P "$WD_PID" 2>/dev/null)
+						[ -n "$WD_CHILDREN" ] && kill -9 $WD_CHILDREN 2>/dev/null
+						kill -9 "$WD_PID" 2>/dev/null
+					fi
+					rm -f /tmp/uci_watchdog.pid
+				fi
+
 				rm -rf /tmp/uci_rollback_token /tmp/uci_rollback_backup
-				killall -q uci_watchdog.sh 2>/dev/null
+				rm -f /tmp/uci_watchdog.sh
 
 				json_init
 				json_add_string "status" "confirmed"
@@ -893,11 +954,22 @@ EOF_WD
 			;;
 
 			cancel_rollback)
+				# Terminate watchdog immediately
+				if [ -f "/tmp/uci_watchdog.pid" ]; then
+					WD_PID=$(cat /tmp/uci_watchdog.pid 2>/dev/null | tr -d ' \r\n')
+					if [ -n "$WD_PID" ] && [ "$WD_PID" -gt 1 ] 2>/dev/null; then
+						WD_CHILDREN=$(pgrep -P "$WD_PID" 2>/dev/null)
+						[ -n "$WD_CHILDREN" ] && kill -9 $WD_CHILDREN 2>/dev/null
+						kill -9 "$WD_PID" 2>/dev/null
+					fi
+					rm -f /tmp/uci_watchdog.pid
+				fi
+
 				if [ -d "/tmp/uci_rollback_backup" ]; then
 					cp -rf /tmp/uci_rollback_backup/config/* /etc/config/ 2>/dev/null
 					cp -rf /tmp/uci_rollback_backup/sing-box/* /etc/sing-box/ 2>/dev/null
 					rm -rf /tmp/uci_rollback_backup /tmp/uci_rollback_token
-					killall -q uci_watchdog.sh 2>/dev/null
+					rm -f /tmp/uci_watchdog.sh
 					/etc/init.d/network reload 2>/dev/null
 					/etc/init.d/firewall reload 2>/dev/null
 					/etc/init.d/pbr reload 2>/dev/null
@@ -912,21 +984,30 @@ EOF_WD
 
 			sub_decrypt_fetch)
 				read input
-				URL=$(echo "$input" | jsonfilter -e '@.url' 2>/dev/null)
-				API_KEY=$(echo "$input" | jsonfilter -e '@.api_key' 2>/dev/null)
-				[ -z "$API_KEY" ] && API_KEY="hd_889c9cc025a10885f358d1caefce6108"
+				RAW_URL=$(echo "$input" | jsonfilter -e '@.url' 2>/dev/null | tr -d '\r\n\t ')
+				RAW_KEY=$(echo "$input" | jsonfilter -e '@.api_key' 2>/dev/null | tr -d '\r\n\t ')
 
-				if [ -z "$URL" ]; then
+				if [ -z "$RAW_URL" ]; then
 					return_error "Subscription URL parameter is required"
 				fi
 
-				TARGET_URL="$URL"
-				case "$URL" in
+				# Validate URL scheme
+				case "$RAW_URL" in
+					http://*|https://*|happ://*) ;;
+					*) return_error "Invalid URL scheme. Must be http://, https://, or happ://" ;;
+				esac
+
+				TARGET_URL="$RAW_URL"
+				case "$RAW_URL" in
 					happ://crypt*|happ://add/*)
+						if [ -z "$RAW_KEY" ]; then
+							return_error "Decryption API key is required for encrypted happ:// subscriptions"
+						fi
+						SAFE_ESC_URL=$(printf "%s" "$RAW_URL" | sed 's/"/\\"/g')
 						DEC_RES=$(curl -sS --max-time 10 -X POST "https://happy-decoder.cc/api/v1/decrypt" \
-							-H "Authorization: Bearer $API_KEY" \
+							-H "Authorization: Bearer $RAW_KEY" \
 							-H "Content-Type: application/json" \
-							-d "{\"url\":\"$URL\"}" 2>/dev/null)
+							-d "{\"url\":\"$SAFE_ESC_URL\"}" 2>/dev/null)
 						DEC_URL=$(echo "$DEC_RES" | jsonfilter -e '@.decryptedUrl' 2>/dev/null)
 						[ -n "$DEC_URL" ] && TARGET_URL="$DEC_URL"
 					;;
@@ -935,11 +1016,13 @@ EOF_WD
 				# Direct fetch with Happ UA and 15s timeout
 				SUB_RES=$(curl -sS -L -A "Happ/4.3.0" --max-time 15 "$TARGET_URL" 2>/dev/null)
 
-				# Fallback to Happy Decoder if direct fetch returned empty
-				if [ -z "$SUB_RES" ]; then
+				# Fallback to Happy Decoder if direct fetch returned empty and key was provided
+				if [ -z "$SUB_RES" ] && [ -n "$RAW_KEY" ]; then
+					SAFE_ESC_TARGET=$(printf "%s" "$TARGET_URL" | sed 's/"/\\"/g')
 					SUB_RES=$(curl -sS --max-time 10 -X POST "https://happy-decoder.cc/api/fetch-sub" \
+						-H "Authorization: Bearer $RAW_KEY" \
 						-H "Content-Type: application/json" \
-						-d "{\"url\":\"$TARGET_URL\",\"userAgent\":\"Happ/4.3.0\",\"hwid\":true}" 2>/dev/null)
+						-d "{\"url\":\"$SAFE_ESC_TARGET\",\"userAgent\":\"Happ/4.3.0\",\"hwid\":true}" 2>/dev/null)
 				fi
 
 				if [ -n "$SUB_RES" ]; then
@@ -961,21 +1044,45 @@ EOF_WD
 
 			pbr_set_device_rule)
 				read input
-				DEV_IP=$(echo "$input" | jsonfilter -e '@.ip' 2>/dev/null)
-				DEV_MAC=$(echo "$input" | jsonfilter -e '@.mac' 2>/dev/null)
-				DEV_NAME=$(echo "$input" | jsonfilter -e '@.name' 2>/dev/null)
-				DEV_IFACE=$(echo "$input" | jsonfilter -e '@.interface' 2>/dev/null)
-				DEV_ENABLED=$(echo "$input" | jsonfilter -e '@.enabled' 2>/dev/null)
+				RAW_IP=$(echo "$input" | jsonfilter -e '@.ip' 2>/dev/null | tr -d ' \t\r\n')
+				RAW_MAC=$(echo "$input" | jsonfilter -e '@.mac' 2>/dev/null | tr -d ' \t\r\n')
+				RAW_NAME=$(echo "$input" | jsonfilter -e '@.name' 2>/dev/null)
+				RAW_IFACE=$(echo "$input" | jsonfilter -e '@.interface' 2>/dev/null | tr -d ' \t\r\n')
+				DEV_ENABLED=$(echo "$input" | jsonfilter -e '@.enabled' 2>/dev/null | tr -d ' \t\r\n')
 
+				# Validate IPv4 format
+				DEV_IP=$(printf "%s" "$RAW_IP" | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' || true)
 				if [ -z "$DEV_IP" ]; then
-					return_error "Device IP is required"
+					return_error "Invalid device IP address format"
+				fi
+
+				# Validate MAC if provided
+				DEV_MAC=""
+				if [ -n "$RAW_MAC" ]; then
+					DEV_MAC=$(printf "%s" "$RAW_MAC" | grep -iE '^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$' || true)
+					if [ -z "$DEV_MAC" ]; then
+						return_error "Invalid device MAC address format"
+					fi
+				fi
+
+				# Sanitize DEV_NAME (alphanumeric, spaces, dashes, underscores only)
+				DEV_NAME=$(printf "%s" "$RAW_NAME" | sed 's/[^a-zA-Z0-9 _-]//g' | head -c 64)
+				[ -z "$DEV_NAME" ] && DEV_NAME="Device-$DEV_IP"
+
+				# Validate DEV_IFACE
+				DEV_IFACE=""
+				if [ -n "$RAW_IFACE" ] && [ "$RAW_IFACE" != "default" ]; then
+					DEV_IFACE=$(printf "%s" "$RAW_IFACE" | grep -E '^[a-zA-Z0-9_.-]+$' || true)
+					if [ -z "$DEV_IFACE" ]; then
+						return_error "Invalid interface name format"
+					fi
 				fi
 
 				SEC_NAME="client_$(echo "$DEV_IP" | tr '.' '_')"
 				uci -q delete pbr."$SEC_NAME"
 				if [ "$DEV_ENABLED" = "true" ] && [ -n "$DEV_IFACE" ] && [ "$DEV_IFACE" != "default" ]; then
 					uci set pbr."$SEC_NAME"=policy
-					uci set pbr."$SEC_NAME".name="Device: ${DEV_NAME:-$DEV_IP} ($DEV_IP)"
+					uci set pbr."$SEC_NAME".name="Device: ${DEV_NAME} ($DEV_IP)"
 					uci set pbr."$SEC_NAME".src_addr="$DEV_IP"
 					uci set pbr."$SEC_NAME".interface="$DEV_IFACE"
 					uci set pbr."$SEC_NAME".proto="all"
@@ -985,7 +1092,7 @@ EOF_WD
 				/etc/init.d/pbr reload >/dev/null 2>&1 &
 
 				if [ -n "$DEV_MAC" ]; then
-					DHCP_SEC="host_$(echo "$DEV_MAC" | tr -d ':')"
+					DHCP_SEC="host_$(echo "$DEV_MAC" | tr -d ':-')"
 					uci -q delete dhcp."$DHCP_SEC"
 					uci set dhcp."$DHCP_SEC"=host
 					uci set dhcp."$DHCP_SEC".name="$DEV_NAME"
@@ -1007,16 +1114,30 @@ EOF_WD
 				# Save active node configuration in /etc/sing-box/active_node.json
 				printf "%s\n" "$input" > /etc/sing-box/active_node.json 2>/dev/null
 
-				SERVER=$(echo "$input" | jsonfilter -e '@.server' -e '@.node.server' 2>/dev/null | head -n1)
-				PORT=$(echo "$input" | jsonfilter -e '@.port' -e '@.node.port' 2>/dev/null | head -n1)
-				UUID=$(echo "$input" | jsonfilter -e '@.uuid' -e '@.node.uuid' 2>/dev/null | head -n1)
-				FLOW=$(echo "$input" | jsonfilter -e '@.flow' -e '@.node.flow' 2>/dev/null | head -n1)
-				SNI=$(echo "$input" | jsonfilter -e '@.sni' -e '@.node.sni' 2>/dev/null | head -n1)
-				PUBKEY=$(echo "$input" | jsonfilter -e '@.publicKey' -e '@.node.publicKey' 2>/dev/null | head -n1)
-				SHORTID=$(echo "$input" | jsonfilter -e '@.shortId' -e '@.node.shortId' 2>/dev/null | head -n1)
-				FP=$(echo "$input" | jsonfilter -e '@.fingerprint' -e '@.node.fingerprint' 2>/dev/null | head -n1)
+				RAW_SERVER=$(echo "$input" | jsonfilter -e '@.server' -e '@.node.server' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
+				RAW_PORT=$(echo "$input" | jsonfilter -e '@.port' -e '@.node.port' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
+				RAW_UUID=$(echo "$input" | jsonfilter -e '@.uuid' -e '@.node.uuid' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
+				RAW_FLOW=$(echo "$input" | jsonfilter -e '@.flow' -e '@.node.flow' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
+				RAW_SNI=$(echo "$input" | jsonfilter -e '@.sni' -e '@.node.sni' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
+				RAW_PUBKEY=$(echo "$input" | jsonfilter -e '@.publicKey' -e '@.node.publicKey' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
+				RAW_SHORTID=$(echo "$input" | jsonfilter -e '@.shortId' -e '@.node.shortId' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
+				RAW_FP=$(echo "$input" | jsonfilter -e '@.fingerprint' -e '@.node.fingerprint' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
 
-				[ -z "$PORT" ] && PORT=443
+				# Sanitize fields against configuration injection
+				SERVER=$(printf "%s" "$RAW_SERVER" | grep -E '^([a-zA-Z0-9.-]+)$' || true)
+				UUID=$(printf "%s" "$RAW_UUID" | grep -E '^[0-9a-fA-F-]{32,36}$' || true)
+				SNI=$(printf "%s" "$RAW_SNI" | grep -E '^([a-zA-Z0-9.-]+)$' || true)
+				PUBKEY=$(printf "%s" "$RAW_PUBKEY" | grep -E '^[a-zA-Z0-9_/-]{20,64}$' || true)
+				SHORTID=$(printf "%s" "$RAW_SHORTID" | grep -E '^[a-zA-Z0-9]{2,16}$' || true)
+				FP=$(printf "%s" "$RAW_FP" | grep -E '^[a-zA-Z0-9_.-]+$' || true)
+				FLOW=$(printf "%s" "$RAW_FLOW" | grep -E '^[a-zA-Z0-9_.-]+$' || true)
+
+				PORT="$RAW_PORT"
+				case "$PORT" in
+					''|*[!0-9]*) PORT=443 ;;
+					*) if [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then PORT=443; fi ;;
+				esac
+
 				[ -z "$FP" ] && FP="firefox"
 				[ -z "$FLOW" ] && FLOW="xtls-rprx-vision"
 
