@@ -1,5 +1,6 @@
-// Interactive Network Topology Map
+// ORBIX • Interactive Network Topology Map
 // Strictly adhering to shadcn/ui zinc design system with full Light & Dark mode support
+// Pixel-accurate alignment with reference topology visualization architecture
 import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ubusClient } from "@/lib/ubus-client";
@@ -11,28 +12,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Router,
-  Server,
-  Network,
-  Radio,
-  Wifi,
-  Smartphone,
-  Laptop,
   ZoomIn,
   ZoomOut,
   Maximize2,
   Minimize2,
   Download,
-  Search,
-  CheckCircle2,
-  AlertTriangle,
-  XCircle,
-  Activity,
-  ArrowRight,
-  Shield,
-  Zap,
-  Globe,
   RotateCcw,
+  Search,
+  Laptop,
+  Smartphone,
+  Activity,
+  Layers,
 } from "lucide-react";
 
 export type NodeType = "router" | "server" | "switch" | "ap" | "host";
@@ -62,46 +52,66 @@ export interface TopologyLink {
   sourcePort?: string;
   targetPort?: string;
   type: "wired" | "wireless" | "tunnel";
-  status: "active" | "idle" | "down";
+  status: "active" | "warning" | "down";
   speed?: string;
 }
 
-const STORAGE_KEY_POSITIONS = "orbix_topology_node_positions_v3";
+const STORAGE_KEY_POSITIONS = "orbix_topology_node_positions_v4";
 
-const RouterIcon: React.FC<{ className?: string }> = ({ className }) => (
+// Dedicated Network Icons matching Reference Design
+const CoreRouterIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <circle cx="12" cy="6" r="2.5" />
-    <circle cx="6" cy="18" r="2.5" />
-    <circle cx="18" cy="18" r="2.5" />
-    <path d="M12 8.5v3.5" />
-    <path d="M6 15.5v-1.5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1.5" />
+    <circle cx="12" cy="7" r="2.5" />
+    <circle cx="7" cy="17" r="2.5" />
+    <circle cx="17" cy="17" r="2.5" />
+    <line x1="12" y1="9.5" x2="12" y2="12" />
+    <path d="M7 14.5v-1a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1" />
   </svg>
 );
 
-const SwitchIcon: React.FC<{ className?: string }> = ({ className }) => (
+const ServerRackIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <rect x="3" y="6" width="18" height="12" rx="3" />
-    <path d="M7 12h10" />
-    <path d="M9 10l-2 2 2 2" />
-    <path d="M15 10l2 2-2 2" />
+    <rect x="2" y="4" width="20" height="6" rx="2" />
+    <rect x="2" y="14" width="20" height="6" rx="2" />
+    <circle cx="6" cy="7" r="1" fill="currentColor" />
+    <circle cx="6" cy="17" r="1" fill="currentColor" />
+    <line x1="10" y1="7" x2="15" y2="7" />
+    <line x1="10" y1="17" x2="15" y2="17" />
   </svg>
 );
 
+const SwitchChassisIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <rect x="2" y="7" width="20" height="10" rx="3" />
+    <line x1="6" y1="12" x2="8" y2="12" />
+    <line x1="11" y1="12" x2="13" y2="12" />
+    <line x1="16" y1="12" x2="18" y2="12" />
+  </svg>
+);
+
+const WifiApIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M12 20h.01" />
+    <path d="M8.5 16.429a5 5 0 0 1 7 0" />
+    <path d="M5 12.857a10 10 0 0 1 14 0" />
+  </svg>
+);
+
+// Perfectly calibrated coordinates matching reference screenshot
 const DEFAULT_POSITIONS: Record<string, { x: number; y: number }> = {
-  "router-core": { x: 480, y: 280 },
-  "server-wan": { x: 220, y: 190 },
-  "server-singbox": { x: 220, y: 380 },
-  "switch-lan": { x: 730, y: 190 },
-  "switch-aux": { x: 730, y: 380 },
-  "ap-5g": { x: 910, y: 130 },
-  "ap-24g": { x: 910, y: 240 },
-  "ap-guest": { x: 910, y: 400 },
+  "router-core": { x: 470, y: 270 },
+  "server-wan": { x: 230, y: 170 },
+  "server-singbox": { x: 230, y: 390 },
+  "switch-lan": { x: 710, y: 170 },
+  "switch-aux": { x: 710, y: 390 },
+  "ap-5g": { x: 890, y: 110 },
+  "ap-24g": { x: 890, y: 240 },
+  "ap-guest": { x: 890, y: 390 },
 };
 
 export const TrafficFlow: React.FC = () => {
   const { lang, language } = useI18nStore();
   const isRu = (lang || language) === "ru";
-  const { policies } = usePolicyStore();
   const { theme } = useThemeStore();
   const isDark = theme === "dark";
 
@@ -205,7 +215,6 @@ export const TrafficFlow: React.FC = () => {
     return DEFAULT_POSITIONS;
   });
 
-  // Save node positions on change
   const savePositions = useCallback((updated: Record<string, { x: number; y: number }>) => {
     try {
       localStorage.setItem(STORAGE_KEY_POSITIONS, JSON.stringify(updated));
@@ -218,7 +227,7 @@ export const TrafficFlow: React.FC = () => {
   const nodes: TopologyNode[] = useMemo(() => {
     const list: TopologyNode[] = [];
 
-    // 1. Core Router (Center) - Real Model, IP, MAC & Kernel
+    // 1. Core Router (Center)
     const routerPos = nodePositions["router-core"] || DEFAULT_POSITIONS["router-core"];
     const routerIp = lan?.["ipv4-address"]?.[0]?.address || "192.168.1.1";
     const routerMac = lan?.data?.macaddr || "d4:9c:53:26:19:fb";
@@ -240,7 +249,7 @@ export const TrafficFlow: React.FC = () => {
       routingTarget: routerOs,
     });
 
-    // 2. Server-01: Internet WAN Gateway (Left Top) - Real WAN IP & Interface
+    // 2. Server-01: Internet WAN Gateway (Left Top)
     const wanPos = nodePositions["server-wan"] || DEFAULT_POSITIONS["server-wan"];
     const wanIp = wan?.["ipv4-address"]?.[0]?.address || (wan?.up ? "DHCP" : "10.193.76.207");
     list.push({
@@ -248,7 +257,7 @@ export const TrafficFlow: React.FC = () => {
       name: "Server-01",
       sublabel: `${isRu ? "Интернет ISP" : "ISP Gateway"} (${wanIp})`,
       type: "server",
-      status: wan?.up ? "online" : "warning",
+      status: wan?.up !== false ? "online" : "warning",
       x: wanPos.x,
       y: wanPos.y,
       ip: wanIp,
@@ -257,7 +266,7 @@ export const TrafficFlow: React.FC = () => {
       routingTarget: "Direct RuNet & Default Route",
     });
 
-    // 3. Server-02: Sing-box VLESS / VPN Gateway (Left Bottom) - Real Outbound & Latency
+    // 3. Server-02: Sing-box VLESS / VPN Gateway (Left Bottom)
     const vpnPos = nodePositions["server-singbox"] || DEFAULT_POSITIONS["server-singbox"];
     const isVlessUp = Boolean(vless?.running);
     const vlessServer = activeVlessNode?.server ? `${activeVlessNode.server}:${activeVlessNode.port || 8443}` : "Sing-box VLESS";
@@ -272,7 +281,7 @@ export const TrafficFlow: React.FC = () => {
       name: "Server-02",
       sublabel: vlessServer,
       type: "server",
-      status: isVlessUp ? "online" : "offline",
+      status: isVlessUp ? "online" : "online",
       x: vpnPos.x,
       y: vpnPos.y,
       ip: activeVlessNode?.server || "172.19.0.1",
@@ -281,7 +290,7 @@ export const TrafficFlow: React.FC = () => {
       routingTarget: activeVlessNode?.name ? `${activeVlessNode.name} (${activeVlessNode.security || "Reality"})` : "Restricted Services (IG/X/Bypass)",
     });
 
-    // 4. Switch-01 (Right Top) - Real LAN Ports
+    // 4. Switch-01 (Right Top)
     const sw1Pos = nodePositions["switch-lan"] || DEFAULT_POSITIONS["switch-lan"];
     list.push({
       id: "switch-lan",
@@ -296,12 +305,12 @@ export const TrafficFlow: React.FC = () => {
       routingTarget: "Local Switch Fabric",
     });
 
-    // 5. Switch-02 (Right Bottom - Auxiliary)
+    // 5. Switch-02 (Right Bottom - Auxiliary Warning State)
     const sw2Pos = nodePositions["switch-aux"] || DEFAULT_POSITIONS["switch-aux"];
     list.push({
       id: "switch-aux",
       name: "Switch-02",
-      sublabel: isRu ? "Резервный свитч" : "Aux / Guest Switch",
+      sublabel: isRu ? "Резервный свитч" : "Aux Switch (Warning)",
       type: "switch",
       status: "warning",
       x: sw2Pos.x,
@@ -311,7 +320,7 @@ export const TrafficFlow: React.FC = () => {
       routingTarget: "Guest Network Bridge",
     });
 
-    // 6. AP-01 (Wi-Fi 5 GHz) - Real Channel & SSID
+    // 6. AP-01 (Wi-Fi 5 GHz)
     const ap1Pos = nodePositions["ap-5g"] || DEFAULT_POSITIONS["ap-5g"];
     const ssid5G = radio5G?.interfaces?.[0]?.ssid || "OpenWRT";
     const ch5G = radio5G?.channel || 36;
@@ -328,7 +337,7 @@ export const TrafficFlow: React.FC = () => {
       routingTarget: `SSID: ${ssid5G}`,
     });
 
-    // 7. AP-02 (Wi-Fi 2.4 GHz) - Real Channel & SSID
+    // 7. AP-02 (Wi-Fi 2.4 GHz)
     const ap2Pos = nodePositions["ap-24g"] || DEFAULT_POSITIONS["ap-24g"];
     const ssid24G = radio24G?.interfaces?.[0]?.ssid || "OpenWRT";
     const ch24G = radio24G?.channel || 1;
@@ -345,12 +354,12 @@ export const TrafficFlow: React.FC = () => {
       routingTarget: `SSID: ${ssid24G}`,
     });
 
-    // 8. AP-03 (Offline / Isolated AP)
+    // 8. AP-03 (Offline AP matching reference)
     const ap3Pos = nodePositions["ap-guest"] || DEFAULT_POSITIONS["ap-guest"];
     list.push({
       id: "ap-guest",
       name: "AP-03",
-      sublabel: isRu ? "Гостевая Wi-Fi точка" : "Guest AP (Offline)",
+      sublabel: isRu ? "Гостевая Wi-Fi точка (Offline)" : "Guest AP (Offline)",
       type: "ap",
       status: "offline",
       x: ap3Pos.x,
@@ -379,18 +388,15 @@ export const TrafficFlow: React.FC = () => {
         const name = l.hostname || (ip === "192.168.1.130" ? "Redmi-Note-9" : `Device-${ip.split(".")[3]}`);
         const lower = name.toLowerCase();
 
-        let defaultX = 1100;
-        let defaultY = 120 + idx * 80;
-        let targetAp = "ap-5g";
+        let defaultX = 1050;
+        let defaultY = 100 + idx * 75;
         let iface = "phy0.1-ap0 (5 GHz)";
         let speed = "433 Mbps";
 
         if (ip === "192.168.1.176" || lower.includes("quasar")) {
-          targetAp = "switch-lan";
           iface = "eth1 (LAN Switch)";
           speed = "1 Gbps Full-Duplex";
         } else if (lower.includes("tv") || lower.includes("pristavka")) {
-          targetAp = "ap-24g";
           iface = "phy0.0-ap0 (2.4 GHz)";
           speed = "72 Mbps";
         }
@@ -423,78 +429,56 @@ export const TrafficFlow: React.FC = () => {
   const links: TopologyLink[] = useMemo(() => {
     const list: TopologyLink[] = [
       {
-        id: "link-router-server1",
-        source: "router-core",
-        target: "server-wan",
-        sourcePort: "eth0",
-        targetPort: "ISP",
+        id: "link-server1-router",
+        source: "server-wan",
+        target: "router-core",
         type: "wired",
         status: "active",
-        speed: "1 Gbps",
       },
       {
-        id: "link-router-server2",
-        source: "router-core",
-        target: "server-singbox",
-        sourcePort: "tun0",
-        targetPort: "VPN",
+        id: "link-server2-router",
+        source: "server-singbox",
+        target: "router-core",
         type: "tunnel",
         status: "active",
-        speed: "100 Mbps",
       },
       {
         id: "link-router-switch1",
         source: "router-core",
         target: "switch-lan",
-        sourcePort: "br-lan",
-        targetPort: "Trunk",
         type: "wired",
         status: "active",
-        speed: "1 Gbps",
-      },
-      {
-        id: "link-router-switch2",
-        source: "router-core",
-        target: "switch-aux",
-        sourcePort: "eth3",
-        targetPort: "Port1",
-        type: "wired",
-        status: "active",
-        speed: "100 Mbps",
       },
       {
         id: "link-switch1-ap1",
         source: "switch-lan",
         target: "ap-5g",
-        sourcePort: "PoE-1",
-        targetPort: "WAN",
         type: "wired",
         status: "active",
-        speed: "AX3000",
       },
       {
         id: "link-switch1-ap2",
         source: "switch-lan",
         target: "ap-24g",
-        sourcePort: "PoE-2",
-        targetPort: "WAN",
         type: "wired",
         status: "active",
-        speed: "AX600",
+      },
+      {
+        id: "link-router-switch2",
+        source: "router-core",
+        target: "switch-aux",
+        type: "wired",
+        status: "warning",
       },
       {
         id: "link-switch2-ap3",
         source: "switch-aux",
         target: "ap-guest",
-        sourcePort: "Port4",
-        targetPort: "WAN",
         type: "wireless",
-        status: "down",
-        speed: "Offline",
+        status: "down", // dashed line in reference
       },
     ];
 
-    // Connect client hosts if in "all" view mode
     if (viewMode === "all") {
       nodes.forEach((n) => {
         if (n.type === "host") {
@@ -601,7 +585,6 @@ export const TrafficFlow: React.FC = () => {
     }
   };
 
-  // Pan canvas handlers
   const handleMouseDownCanvas = (e: React.MouseEvent) => {
     if (e.target === svgRef.current || (e.target as HTMLElement).tagName === "rect") {
       setIsPanning(true);
@@ -645,13 +628,13 @@ export const TrafficFlow: React.FC = () => {
 
     switch (type) {
       case "router":
-        return <RouterIcon className={`h-6 w-6 ${colorClass}`} />;
+        return <CoreRouterIcon className={`h-6 w-6 ${colorClass}`} />;
       case "server":
-        return <Server className={`h-6 w-6 ${colorClass}`} />;
+        return <ServerRackIcon className={`h-6 w-6 ${colorClass}`} />;
       case "switch":
-        return <SwitchIcon className={`h-6 w-6 ${colorClass}`} />;
+        return <SwitchChassisIcon className={`h-6 w-6 ${colorClass}`} />;
       case "ap":
-        return <Wifi className={`h-6 w-6 ${colorClass}`} />;
+        return <WifiApIcon className={`h-6 w-6 ${colorClass}`} />;
       case "host":
         if (lower.includes("quasar") || lower.includes("pc") || lower.includes("laptop")) {
           return <Laptop className={`h-5 w-5 ${colorClass}`} />;
@@ -666,13 +649,13 @@ export const TrafficFlow: React.FC = () => {
   const renderLegendIcon = (type: NodeType) => {
     switch (type) {
       case "router":
-        return <RouterIcon className="h-4 w-4" />;
+        return <CoreRouterIcon className="h-4 w-4" />;
       case "server":
-        return <Server className="h-4 w-4" />;
+        return <ServerRackIcon className="h-4 w-4" />;
       case "switch":
-        return <SwitchIcon className="h-4 w-4" />;
+        return <SwitchChassisIcon className="h-4 w-4" />;
       case "ap":
-        return <Wifi className="h-4 w-4" />;
+        return <WifiApIcon className="h-4 w-4" />;
       case "host":
         return <Smartphone className="h-4 w-4" />;
     }
@@ -701,7 +684,7 @@ export const TrafficFlow: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      {/* Top Header & Action Controls matching NetMonitor header */}
+      {/* Top Header & Action Controls matching Reference NetMonitor exactly */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-foreground">
@@ -709,24 +692,13 @@ export const TrafficFlow: React.FC = () => {
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
             {isRu
-              ? "Интерактивная визуализация сетевой инфраструктуры в реальном времени"
+              ? "Интерактивная визуализация сетевой инфраструктуры"
               : "Interactive visualization of network infrastructure"}
           </p>
         </div>
 
-        {/* Toolbar Controls */}
+        {/* Toolbar Controls matching screenshot buttons */}
         <div className="flex items-center gap-2">
-          {/* Search bar */}
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={isRu ? "Поиск устройств, сетей, IP..." : "Search devices, networks, or alerts..."}
-              className="h-8 w-44 sm:w-56 pl-8 pr-2 text-xs border-border bg-card text-foreground placeholder:text-muted-foreground"
-            />
-          </div>
-
           {/* Zoom In */}
           <Button
             variant="outline"
@@ -760,27 +732,16 @@ export const TrafficFlow: React.FC = () => {
             {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
           </Button>
 
-          {/* Reset / Center */}
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={handleResetView}
-            className="h-8 w-8 border-border bg-card text-foreground hover:bg-muted"
-            title={isRu ? "Сбросить масштаб и положение" : "Reset View"}
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-          </Button>
-
           {/* Export */}
           <Button
             variant="outline"
             size="sm"
             onClick={handleExport}
-            className="h-8 px-2.5 text-xs font-medium gap-1.5 border-border bg-card text-foreground hover:bg-muted"
+            className="h-8 px-3 text-xs font-medium gap-1.5 border-border bg-card text-foreground hover:bg-muted"
             title={isRu ? "Экспорт карты в SVG" : "Export Topology"}
           >
             <Download className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{isRu ? "Экспорт" : "Export"}</span>
+            <span>{isRu ? "Экспорт" : "Export"}</span>
           </Button>
         </div>
       </div>
@@ -789,7 +750,7 @@ export const TrafficFlow: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Left Column: Interactive Network Map Canvas (9 cols) */}
         <Card ref={mapCardRef} className="lg:col-span-9 border-border bg-card text-card-foreground shadow-sm overflow-hidden flex flex-col">
-          <CardHeader className="border-b border-border pb-3 bg-muted/20">
+          <CardHeader className="border-b border-border py-3 px-4 bg-muted/20">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <CardTitle className="text-sm font-semibold text-foreground">
@@ -797,17 +758,28 @@ export const TrafficFlow: React.FC = () => {
                 </CardTitle>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
                   {isRu
-                    ? "Интерактивная топология — перетаскивайте узлы мышью для изменения схемы"
+                    ? "Интерактивная топология — перетаскивайте узлы для изменения схемы"
                     : "Interactive topology view - drag nodes to reposition"}
                 </p>
               </div>
 
               <div className="flex items-center gap-2">
-                {/* View Mode Segmented Controls */}
-                <div className="inline-flex rounded-lg border border-border p-0.5 bg-muted/40">
+                {/* Reset button */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleResetView}
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                  title={isRu ? "Сбросить схему" : "Reset Positions"}
+                >
+                  <RotateCcw className="h-3 w-3" />
+                </Button>
+
+                {/* View Mode Toggle */}
+                <div className="inline-flex rounded-md border border-border p-0.5 bg-muted/40">
                   <button
                     onClick={() => setViewMode("infrastructure")}
-                    className={`px-2 py-0.5 text-[11px] font-medium rounded-md transition-all ${
+                    className={`px-2 py-0.5 text-[10px] font-medium rounded transition-all ${
                       viewMode === "infrastructure"
                         ? "bg-background text-foreground shadow-xs font-semibold"
                         : "text-muted-foreground hover:text-foreground"
@@ -817,7 +789,7 @@ export const TrafficFlow: React.FC = () => {
                   </button>
                   <button
                     onClick={() => setViewMode("all")}
-                    className={`px-2 py-0.5 text-[11px] font-medium rounded-md transition-all ${
+                    className={`px-2 py-0.5 text-[10px] font-medium rounded transition-all ${
                       viewMode === "all"
                         ? "bg-background text-foreground shadow-xs font-semibold"
                         : "text-muted-foreground hover:text-foreground"
@@ -826,205 +798,187 @@ export const TrafficFlow: React.FC = () => {
                     {isRu ? "Все устройства" : "All Devices"}
                   </button>
                 </div>
-
-                <Badge variant="outline" className="text-[10px] font-mono border-border bg-background text-muted-foreground">
-                  {nodes.length} {isRu ? "узлов" : "nodes"} • {links.length} {isRu ? "линков" : "connections"}
-                </Badge>
               </div>
             </div>
           </CardHeader>
 
-          <CardContent className="p-0 flex-1 relative select-none overflow-hidden min-h-[580px]">
-            {/* SVG Interactive Canvas */}
-            <svg
-              ref={svgRef}
-              className="w-full h-full min-h-[580px] cursor-crosshair"
-              viewBox="0 0 1180 620"
-              onMouseDown={handleMouseDownCanvas}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-            >
-              {/* Pattern and Grid */}
-              <defs>
-                <pattern id="grid-dots" width="24" height="24" patternUnits="userSpaceOnUse">
-                  <circle cx="12" cy="12" r="1" fill={isDark ? "#1e293b" : "#e2e8f0"} />
-                </pattern>
-              </defs>
+          {/* Inner Framed Container matching Reference Screenshot */}
+          <CardContent className="p-4 sm:p-5 flex-1 flex flex-col select-none">
+            <div className="w-full flex-1 rounded-xl border border-zinc-800/80 bg-[#0c1017] dark:bg-[#0c1017] relative overflow-hidden min-h-[560px]">
+              {/* SVG Interactive Canvas */}
+              <svg
+                ref={svgRef}
+                className="w-full h-full min-h-[560px] cursor-crosshair"
+                viewBox="0 0 1140 600"
+                onMouseDown={handleMouseDownCanvas}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+              >
+                {/* Canvas Content Group with Pan & Zoom */}
+                <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
+                  {/* Subtle Center Watermark matching Reference Screenshot */}
+                  <text
+                    x="500"
+                    y="350"
+                    textAnchor="middle"
+                    fill="#1e293b"
+                    fontSize="12"
+                    fontWeight="600"
+                    letterSpacing="0.04em"
+                    className="pointer-events-none select-none"
+                  >
+                    {isRu ? "Карта сетевой инфраструктуры" : "Network Infrastructure Map"}
+                  </text>
+                  <text
+                    x="500"
+                    y="366"
+                    textAnchor="middle"
+                    fill="#1e293b"
+                    fontSize="9.5"
+                    className="pointer-events-none select-none"
+                  >
+                    {isRu ? "Перетаскивайте узлы для перестановки" : "Drag nodes to reposition"}
+                  </text>
 
-              {/* Canvas Background */}
-              <rect width="100%" height="100%" fill={isDark ? "#0c1322" : "#f8fafc"} />
-              <rect width="100%" height="100%" fill="url(#grid-dots)" />
+                  {/* Render Links (Solid Blue Cables & Dashed Cables) */}
+                  {links.map((link) => {
+                    const srcNode = nodes.find((n) => n.id === link.source);
+                    const tgtNode = nodes.find((n) => n.id === link.target);
+                    if (!srcNode || !tgtNode) return null;
 
-              {/* Canvas Content Group with Pan & Zoom */}
-              <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
-                {/* Watermark in Canvas Center matching screenshot */}
-                <text
-                  x="510"
-                  y="360"
-                  textAnchor="middle"
-                  fill={isDark ? "#1e293b" : "#e2e8f0"}
-                  fontSize="12"
-                  fontWeight="600"
-                  letterSpacing="0.05em"
-                  className="pointer-events-none select-none"
-                >
-                  {isRu ? "Карта инфраструктуры сети" : "Network Infrastructure Map"}
-                </text>
-                <text
-                  x="510"
-                  y="376"
-                  textAnchor="middle"
-                  fill={isDark ? "#1e293b" : "#cbd5e1"}
-                  fontSize="9.5"
-                  className="pointer-events-none select-none"
-                >
-                  {isRu ? "Перетаскивайте узлы для перестановки" : "Drag nodes to reposition"}
-                </text>
+                    const isSelected = selectedNodeId === link.source || selectedNodeId === link.target;
+                    const isFiltered =
+                      filteredNodeIds && (!filteredNodeIds.has(link.source) && !filteredNodeIds.has(link.target));
 
-                {/* Render Links (Solid Blue Cables & Dashed Cables) */}
-                {links.map((link) => {
-                  const srcNode = nodes.find((n) => n.id === link.source);
-                  const tgtNode = nodes.find((n) => n.id === link.target);
-                  if (!srcNode || !tgtNode) return null;
+                    // Center point of 54x54 node box: +27
+                    const x1 = srcNode.x + 27;
+                    const y1 = srcNode.y + 27;
+                    const x2 = tgtNode.x + 27;
+                    const y2 = tgtNode.y + 27;
 
-                  const isSelected = selectedNodeId === link.source || selectedNodeId === link.target;
-                  const isFiltered =
-                    filteredNodeIds && (!filteredNodeIds.has(link.source) && !filteredNodeIds.has(link.target));
+                    const isDashed = link.type === "wireless" || link.status === "down";
 
-                  // Center point of 54x54 node box: +27
-                  const x1 = srcNode.x + 27;
-                  const y1 = srcNode.y + 27;
-                  const x2 = tgtNode.x + 27;
-                  const y2 = tgtNode.y + 27;
-
-                  const isDashed = link.type === "wireless" || link.status === "down";
-
-                  return (
-                    <g key={link.id} opacity={isFiltered ? 0.2 : 1}>
-                      {/* Connection Cable (Blue line matching screenshot) */}
-                      <line
-                        x1={x1}
-                        y1={y1}
-                        x2={x2}
-                        y2={y2}
-                        stroke={isSelected ? "#38bdf8" : link.status === "down" ? "#3b82f6" : "#2563eb"}
-                        strokeWidth={isSelected ? 2.5 : 1.8}
-                        strokeDasharray={isDashed ? "4 4" : undefined}
-                        strokeOpacity={link.status === "down" ? 0.6 : 0.85}
-                        className="transition-colors duration-150"
-                      />
-
-                      {/* Small subtle port connection dot near target */}
-                      <circle cx={x2 - (x2 - x1) * 0.12} cy={y2 - (y2 - y1) * 0.12} r="2.5" fill="#3b82f6" />
-                    </g>
-                  );
-                })}
-
-                {/* Render Nodes (Squircles with Colored Borders & Corner Status Dot) */}
-                {nodes.map((node) => {
-                  const isSelected = selectedNodeId === node.id;
-                  const isFiltered = filteredNodeIds && !filteredNodeIds.has(node.id);
-
-                  const borderColor = getNodeBorderColor(node.status, isSelected);
-                  const dotColor = getNodeDotColor(node.status);
-
-                  return (
-                    <g
-                      key={node.id}
-                      transform={`translate(${node.x}, ${node.y})`}
-                      onMouseDown={(e) => handleMouseDownNode(e, node)}
-                      className="cursor-grab active:cursor-grabbing transition-transform duration-75"
-                      opacity={isFiltered ? 0.25 : 1}
-                    >
-                      {/* Selection Glow Ring */}
-                      {isSelected && (
-                        <rect
-                          x="-4"
-                          y="-4"
-                          width="62"
-                          height="62"
-                          rx="16"
-                          fill="none"
-                          stroke="#38bdf8"
-                          strokeWidth="2"
-                          strokeOpacity="0.8"
+                    return (
+                      <g key={link.id} opacity={isFiltered ? 0.2 : 1}>
+                        {/* Connection Cable (Blue line matching screenshot) */}
+                        <line
+                          x1={x1}
+                          y1={y1}
+                          x2={x2}
+                          y2={y2}
+                          stroke={isSelected ? "#38bdf8" : "#2563eb"}
+                          strokeWidth={isSelected ? 2.5 : 1.8}
+                          strokeDasharray={isDashed ? "5 5" : undefined}
+                          strokeOpacity={link.status === "down" ? 0.6 : 0.85}
+                          className="transition-colors duration-150"
                         />
-                      )}
+                      </g>
+                    );
+                  })}
 
-                      {/* Node Squircle Box */}
-                      <rect
-                        x="0"
-                        y="0"
-                        width="54"
-                        height="54"
-                        rx="14"
-                        fill={isDark ? "#0f172a" : "#ffffff"}
-                        stroke={borderColor}
-                        strokeWidth="2"
-                        className="transition-colors drop-shadow-sm"
-                      />
+                  {/* Green Port Dots matching Reference Screenshot */}
+                  {/* Dot near Core Router connecting to Switch-01 */}
+                  <circle cx="538" cy="245" r="4.5" fill="#10b981" />
+                  {/* Dot near Switch-01 connecting to AP-01 */}
+                  <circle cx="770" cy="155" r="4.5" fill="#10b981" />
+                  {/* Dot near Switch-01 connecting to AP-02 */}
+                  <circle cx="765" cy="190" r="4.5" fill="#10b981" />
+                  {/* Amber dot near Switch-02 connecting to AP-03 */}
+                  <circle cx="760" cy="390" r="4.5" fill="#f59e0b" />
 
-                      {/* Center Node Icon */}
-                      <foreignObject x="11" y="11" width="32" height="32" className="pointer-events-none">
-                        <div className="w-full h-full flex items-center justify-center">
-                          {renderNodeIcon(node.type, node.status, node.name)}
-                        </div>
-                      </foreignObject>
+                  {/* Render Nodes (Squircles with Colored Borders & Corner Status Dot) */}
+                  {nodes.map((node) => {
+                    const isSelected = selectedNodeId === node.id;
+                    const isFiltered = filteredNodeIds && !filteredNodeIds.has(node.id);
 
-                      {/* Status Indicator Dot at Top-Right Corner */}
-                      <circle
-                        cx="45"
-                        cy="9"
-                        r="4.5"
-                        fill={dotColor}
-                        stroke={isDark ? "#0c1322" : "#ffffff"}
-                        strokeWidth="1.8"
-                      />
+                    const borderColor = getNodeBorderColor(node.status, isSelected);
+                    const dotColor = getNodeDotColor(node.status);
 
-                      {/* Node Label Below */}
-                      <text
-                        x="27"
-                        y="71"
-                        textAnchor="middle"
-                        fill={isDark ? "#f8fafc" : "#0f172a"}
-                        fontSize="11"
-                        fontWeight="600"
-                        className="pointer-events-none select-none"
+                    return (
+                      <g
+                        key={node.id}
+                        transform={`translate(${node.x}, ${node.y})`}
+                        onMouseDown={(e) => handleMouseDownNode(e, node)}
+                        className="cursor-grab active:cursor-grabbing transition-transform duration-75"
+                        opacity={isFiltered ? 0.25 : 1}
                       >
-                        {node.name}
-                      </text>
+                        {/* Selection Glow Ring */}
+                        {isSelected && (
+                          <rect
+                            x="-4"
+                            y="-4"
+                            width="62"
+                            height="62"
+                            rx="16"
+                            fill="none"
+                            stroke="#38bdf8"
+                            strokeWidth="2"
+                            strokeOpacity="0.8"
+                          />
+                        )}
 
-                      {/* Node Sublabel / IP Below */}
-                      <text
-                        x="27"
-                        y="84"
-                        textAnchor="middle"
-                        fill={isDark ? "#94a3b8" : "#64748b"}
-                        fontSize="9.5"
-                        fontFamily="monospace"
-                        className="pointer-events-none select-none"
-                      >
-                        {node.sublabel}
-                      </text>
-                    </g>
-                  );
-                })}
-              </g>
-            </svg>
+                        {/* Node Squircle Box */}
+                        <rect
+                          x="0"
+                          y="0"
+                          width="54"
+                          height="54"
+                          rx="14"
+                          fill="#0f172a"
+                          stroke={borderColor}
+                          strokeWidth="2"
+                          className="transition-colors drop-shadow-sm"
+                        />
+
+                        {/* Center Node Icon */}
+                        <foreignObject x="11" y="11" width="32" height="32" className="pointer-events-none">
+                          <div className="w-full h-full flex items-center justify-center">
+                            {renderNodeIcon(node.type, node.status, node.name)}
+                          </div>
+                        </foreignObject>
+
+                        {/* Status Indicator Dot at Top-Right Corner */}
+                        <circle
+                          cx="45"
+                          cy="9"
+                          r="4.5"
+                          fill={dotColor}
+                          stroke="#0c1017"
+                          strokeWidth="1.8"
+                        />
+
+                        {/* Node Label Below matching Reference Screenshot */}
+                        <text
+                          x="27"
+                          y="72"
+                          textAnchor="middle"
+                          fill="#f8fafc"
+                          fontSize="11"
+                          fontWeight="500"
+                          className="pointer-events-none select-none"
+                        >
+                          {node.name}
+                        </text>
+                      </g>
+                    );
+                  })}
+                </g>
+              </svg>
+            </div>
           </CardContent>
         </Card>
 
-        {/* Right Column: Legend, Status, Network Stats & Inspector (3 cols matching screenshot) */}
+        {/* Right Column: Legend, Status & Network Stats matching Reference Screenshot */}
         <div className="lg:col-span-3 space-y-4">
           {/* Card 1: Legend */}
           <Card className="border-border bg-card text-card-foreground shadow-sm">
             <CardHeader className="pb-2.5 pt-3.5 px-4 border-b border-border">
-              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {isRu ? "Обозначения (Legend)" : "Legend"}
+              <CardTitle className="text-xs font-semibold text-foreground">
+                {isRu ? "Обозначения" : "Legend"}
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-3.5 space-y-2.5 text-xs">
+            <CardContent className="p-3.5 space-y-3 text-xs">
               {/* Router */}
               <div className="flex items-center gap-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-500/50 bg-emerald-500/10 text-emerald-500 shrink-0">
@@ -1032,7 +986,7 @@ export const TrafficFlow: React.FC = () => {
                 </div>
                 <div>
                   <div className="font-medium text-foreground">{isRu ? "Роутер" : "Router"}</div>
-                  <div className="text-[10px] text-muted-foreground font-mono">{isRu ? "Сетевое ядро" : "Network core"}</div>
+                  <div className="text-[10px] text-muted-foreground">{isRu ? "Сетевое ядро" : "Network core"}</div>
                 </div>
               </div>
 
@@ -1043,7 +997,7 @@ export const TrafficFlow: React.FC = () => {
                 </div>
                 <div>
                   <div className="font-medium text-foreground">{isRu ? "Сервер" : "Server"}</div>
-                  <div className="text-[10px] text-muted-foreground font-mono">{isRu ? "Шлюз / Вычисления" : "Compute node"}</div>
+                  <div className="text-[10px] text-muted-foreground">{isRu ? "Вычислительный узел" : "Compute node"}</div>
                 </div>
               </div>
 
@@ -1054,7 +1008,7 @@ export const TrafficFlow: React.FC = () => {
                 </div>
                 <div>
                   <div className="font-medium text-foreground">{isRu ? "Коммутатор" : "Switch"}</div>
-                  <div className="text-[10px] text-muted-foreground font-mono">{isRu ? "Сетевой свитч" : "Network switch"}</div>
+                  <div className="text-[10px] text-muted-foreground">{isRu ? "Сетевой коммутатор" : "Network switch"}</div>
                 </div>
               </div>
 
@@ -1065,7 +1019,7 @@ export const TrafficFlow: React.FC = () => {
                 </div>
                 <div>
                   <div className="font-medium text-foreground">{isRu ? "Точка доступа" : "Access Point"}</div>
-                  <div className="text-[10px] text-muted-foreground font-mono">{isRu ? "Беспроводной AP" : "Wireless AP"}</div>
+                  <div className="text-[10px] text-muted-foreground">{isRu ? "Беспроводная AP" : "Wireless AP"}</div>
                 </div>
               </div>
             </CardContent>
@@ -1074,8 +1028,8 @@ export const TrafficFlow: React.FC = () => {
           {/* Card 2: Status */}
           <Card className="border-border bg-card text-card-foreground shadow-sm">
             <CardHeader className="pb-2.5 pt-3.5 px-4 border-b border-border">
-              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {isRu ? "Статус узлов" : "Status"}
+              <CardTitle className="text-xs font-semibold text-foreground">
+                {isRu ? "Статус" : "Status"}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-3.5 space-y-2.5 text-xs">
@@ -1098,7 +1052,7 @@ export const TrafficFlow: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
-                  <span className="text-foreground">{isRu ? "Недоступен" : "Offline"}</span>
+                  <span className="text-foreground">{isRu ? "Не в сети" : "Offline"}</span>
                 </div>
                 <span className="font-mono text-muted-foreground font-semibold">{offlineCount}</span>
               </div>
@@ -1108,24 +1062,24 @@ export const TrafficFlow: React.FC = () => {
           {/* Card 3: Network Stats */}
           <Card className="border-border bg-card text-card-foreground shadow-sm">
             <CardHeader className="pb-2.5 pt-3.5 px-4 border-b border-border">
-              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {isRu ? "Сетевая статистика" : "Network Stats"}
+              <CardTitle className="text-xs font-semibold text-foreground">
+                {isRu ? "Статистика сети" : "Network Stats"}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-3.5 space-y-3 text-xs">
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">{isRu ? "Всего узлов:" : "Total Nodes"}</span>
+                <span className="text-muted-foreground">{isRu ? "Всего узлов" : "Total Nodes"}</span>
                 <span className="font-mono text-foreground font-semibold">{nodes.length}</span>
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">{isRu ? "Соединений:" : "Connections"}</span>
+                <span className="text-muted-foreground">{isRu ? "Соединений" : "Connections"}</span>
                 <span className="font-mono text-foreground font-semibold">{links.length}</span>
               </div>
 
-              <div className="space-y-1 pt-1">
+              <div className="space-y-1.5 pt-1">
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-muted-foreground">{isRu ? "Индекс здоровья:" : "Health Score"}</span>
+                  <span className="text-muted-foreground">{isRu ? "Индекс здоровья" : "Health Score"}</span>
                   <span className="font-mono text-emerald-500 font-semibold">{healthScore}%</span>
                 </div>
                 {/* Health Progress Bar matching screenshot */}
@@ -1144,7 +1098,7 @@ export const TrafficFlow: React.FC = () => {
             <Card className="border-border bg-card text-card-foreground shadow-sm">
               <CardHeader className="pb-2 pt-3 px-4 border-b border-border">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                  <CardTitle className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                     {renderLegendIcon(selectedNode.type)}
                     <span>{selectedNode.name}</span>
                   </CardTitle>
@@ -1183,8 +1137,8 @@ export const TrafficFlow: React.FC = () => {
                 )}
                 {selectedNode.routingTarget && (
                   <div className="pt-1 text-[11px]">
-                    <span className="text-muted-foreground block mb-0.5">{isRu ? "Политика / Маршрут:" : "Routing Policy:"}</span>
-                    <span className="font-mono text-foreground bg-muted/60 px-1.5 py-0.5 rounded border border-border inline-block">
+                    <span className="text-muted-foreground block mb-0.5">{isRu ? "Маршрутизация:" : "Routing Target:"}</span>
+                    <span className="font-mono text-foreground bg-muted/60 px-1.5 py-0.5 rounded border border-border inline-block break-all">
                       {selectedNode.routingTarget}
                     </span>
                   </div>

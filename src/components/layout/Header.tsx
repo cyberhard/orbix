@@ -19,6 +19,7 @@ import {
   Wand2,
 } from "lucide-react";
 import { useWizardStore } from "@/services/wizard/wizard-store";
+import { NotificationCenter } from "@/components/notifications/NotificationCenter";
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -169,6 +170,9 @@ export const Header: React.FC<HeaderProps> = ({
         >
           {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </Button>
+
+        {/* Central Notification & Alert Center */}
+        <NotificationCenter />
 
         {/* Reboot */}
         <Button

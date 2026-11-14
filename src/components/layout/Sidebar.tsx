@@ -28,6 +28,7 @@ import {
   Server,
   Download,
   Wand2,
+  ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18nStore } from "@/store/i18n-store";
@@ -92,6 +93,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, onSelectRoute, i
           title: lang === "ru" ? "Диагностика и Система" : "Diagnostics & System",
           items: [
             { id: "diagnostics", label: t.nav.diagnostics, icon: <Terminal className="h-4 w-4" /> },
+            { id: "errors", label: lang === "ru" ? "Журнал ошибок" : "Error Log", icon: <ShieldAlert className="h-4 w-4" />, badge: "Audit" },
             { id: "bandwidth", label: t.nav.realtimeGraphs, icon: <LineChart className="h-4 w-4" /> },
             { id: "general", label: t.nav.generalSettings, icon: <Cpu className="h-4 w-4" /> },
             { id: "install", label: t.nav.installCatalog, icon: <Download className="h-4 w-4" />, badge: "Catalog" },
@@ -118,6 +120,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, onSelectRoute, i
             { id: "bandwidth", label: t.nav.realtimeGraphs, icon: <LineChart className="h-4 w-4" /> },
             { id: "clients", label: t.nav.connectedClients, icon: <Users className="h-4 w-4" /> },
             { id: "logs", label: t.nav.systemLogs, icon: <Terminal className="h-4 w-4" /> },
+            { id: "errors", label: lang === "ru" ? "Журнал ошибок" : "Error Log", icon: <ShieldAlert className="h-4 w-4" />, badge: "Audit" },
           ],
         },
         {
