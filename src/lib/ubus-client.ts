@@ -659,6 +659,64 @@ class UbusClient {
   public async cancelRollback(): Promise<{ status: string }> {
     return this.call<{ status: string }>("circumvention", "cancel_rollback", {});
   }
+
+  // Policy Engine Backend Synchronization
+  public async applyPolicyBackend(payload: {
+    blocked_domains: string[];
+    direct_domains: string[];
+    proxy_domains: string[];
+    policies?: any[];
+  }): Promise<{ status: string; blocked_count: number }> {
+    return this.call<{ status: string; blocked_count: number }>("circumvention", "policy_apply", payload);
+  }
+
+  public async getPolicyBackendStatus(): Promise<{
+    active: boolean;
+    blocked_domains: string[];
+    direct_domains: string[];
+    proxy_domains: string[];
+    rules_count: number;
+    updated_at: number;
+  }> {
+    return this.call("circumvention", "policy_status", {});
+  }
+
+  // Captive Portal & Secure Error Portal Methods
+  public async getCaptiveConfig(): Promise<any> {
+    return this.call("circumvention", "captive_get_config", {});
+  }
+
+  public async setCaptiveConfig(config: any): Promise<{ status: string }> {
+    return this.call("circumvention", "captive_set_config", config);
+  }
+
+  public async getCaptiveStatus(): Promise<any> {
+    return this.call("circumvention", "captive_get_status", {});
+  }
+
+  public async getCaptiveClients(): Promise<{ clients: any[] }> {
+    return this.call("circumvention", "captive_get_clients", {});
+  }
+
+  public async setClientExemption(ip: string, exempt: boolean): Promise<{ status: string }> {
+    return this.call("circumvention", "captive_set_client_exemption", { ip, exempt });
+  }
+
+  public async getCertStatus(): Promise<any> {
+    return this.call("circumvention", "captive_cert_status", {});
+  }
+
+  public async renewCert(): Promise<{ status: string; domain?: string; message?: string }> {
+    return this.call("circumvention", "captive_cert_renew", {});
+  }
+
+  public async uploadCert(cert: string, key: string, domain?: string): Promise<{ status: string; message?: string }> {
+    return this.call("circumvention", "captive_cert_upload", { cert, key, domain: domain || "" });
+  }
+
+  public async runCaptiveDiagnostics(): Promise<{ checks: any[] }> {
+    return this.call("circumvention", "captive_run_diagnostics", {});
+  }
 }
 
 export const ubusClient = new UbusClient();

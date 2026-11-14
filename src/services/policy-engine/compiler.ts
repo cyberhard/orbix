@@ -192,6 +192,10 @@ export class PolicyCompiler {
     compiled.zapretHostlists.general = Array.from(zapretGeneralSet);
     compiled.zapretHostlists.exclude = Array.from(zapretExcludeSet);
 
+    compiled.blockedDomains = Array.from(singboxBlockSet);
+    compiled.directDomains = Array.from(singboxDirectSet);
+    compiled.proxyDomains = Array.from(singboxProxySet);
+
     // Split DNS configuration: Russian domains to Yandex (77.88.8.8), rest to Google DoH/DoT (127.0.0.1#5353)
     const ruCategory = this.categories.get("russia");
     const ruDomains = ruCategory ? ruCategory.domains : [".ru", ".su", ".xn--p1ai", "yandex.ru", "gosuslugi.ru", "sberbank.ru"];

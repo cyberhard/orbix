@@ -30,26 +30,53 @@ import {
 } from "lucide-react";
 
 interface ErrorDetailViewProps {
-  code: number;
+  code?: number;
+  errorCode?: number;
   onNavigate?: (route: string) => void;
 }
 
-export const ErrorDetailView: React.FC<ErrorDetailViewProps> = ({ code, onNavigate }) => {
+export const ErrorDetailView: React.FC<ErrorDetailViewProps> = ({ code, errorCode, onNavigate }) => {
+  const targetCode = code || errorCode || 410;
   const { lang } = useI18nStore();
   const isRu = lang === "ru";
-  const def = getErrorByCode(code);
+  const def = getErrorByCode(targetCode);
   const { events, resolveEvent } = useErrorStore();
 
   const [isRunningAction, setIsRunningAction] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [runtimeState, setRuntimeState] = useState<any>(null);
+  const [blockedDomain, setBlockedDomain] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const hash = window.location.hash;
+      const qIdx = hash.indexOf("?");
+      const queryStr = qIdx !== -1 ? hash.substring(qIdx) : window.location.search;
+      const params = new URLSearchParams(queryStr);
+      let raw = params.get("domain") || params.get("host");
+      if (!raw && params.get("blocked")) {
+        try {
+          raw = new URL(params.get("blocked")!).hostname;
+        } catch {
+          raw = params.get("blocked");
+        }
+      }
+      if (raw) {
+        // Sanitize to prevent XSS / CRLF
+        const clean = raw.replace(/[^a-zA-Z0-9.-]/g, "").slice(0, 128);
+        setBlockedDomain(clean || null);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   // Find recent matching active event if any
-  const matchedEvent = events.find((e) => e.code === code && e.status === "active") || events.find((e) => e.code === code);
+  const matchedEvent = events.find((e) => e.code === targetCode && e.status === "active") || events.find((e) => e.code === targetCode);
 
   useEffect(() => {
     killSwitchManager.getRuntimeState().then(setRuntimeState);
-  }, [code]);
+  }, [targetCode]);
 
   const handleRetryConnection = async () => {
     setIsRunningAction(true);
@@ -189,6 +216,41 @@ export const ErrorDetailView: React.FC<ErrorDetailViewProps> = ({ code, onNaviga
         </CardHeader>
 
         <CardContent className="pt-4 space-y-4">
+          {blockedDomain && (
+            <div className="p-3.5 rounded-lg border border-amber-800/40 bg-amber-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <Globe className="h-5 w-5 text-amber-500 shrink-0" />
+                <div>
+                  <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
+                    {isRu ? "Заблокированный веб-ресурс:" : "Restricted Destination Domain:"}
+                  </div>
+                  <div className="text-sm font-mono font-bold text-foreground">
+                    {blockedDomain}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onNavigate ? onNavigate("policies") : (window.location.hash = "#/policies")}
+                  className="h-8 text-xs font-medium border-border bg-card text-foreground hover:bg-muted"
+                >
+                  {isRu ? "Политики доступа" : "Manage Policies"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onNavigate ? onNavigate("captive") : (window.location.hash = "#/captive")}
+                  className="h-8 text-xs font-medium text-muted-foreground hover:text-foreground"
+                >
+                  {isRu ? "Каптив-портал" : "Captive Portal"}
+                </Button>
+              </div>
+            </div>
+          )}
+
           <p className="text-sm text-foreground/90 leading-relaxed">
             {isRu ? def.description.ru : def.description.en}
           </p>

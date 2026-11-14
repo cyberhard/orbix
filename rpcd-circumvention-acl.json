@@ -13,7 +13,13 @@
 					"pbr_status",
 					"pbr_trace",
 					"killswitch_status",
-					"sub_get_cache"
+					"sub_get_cache",
+					"policy_status",
+					"captive_get_config",
+					"captive_get_status",
+					"captive_get_clients",
+					"captive_run_diagnostics",
+					"captive_cert_status"
 				]
 			}
 		},
@@ -32,7 +38,12 @@
 					"pbr_set_device_rule",
 					"wifi_reload",
 					"killswitch_set",
-					"sub_save_cache"
+					"sub_save_cache",
+					"policy_apply",
+					"captive_set_config",
+					"captive_set_client_exemption",
+					"captive_cert_renew",
+					"captive_cert_upload"
 				]
 			}
 		}

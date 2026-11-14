@@ -172,4 +172,8 @@ export interface CompiledSystemConfig {
     targetIp?: string;
     server?: string;
   }>;
+  firewallRules?: any[];
+  blockedDomains?: string[];
+  directDomains?: string[];
+  proxyDomains?: string[];
 }

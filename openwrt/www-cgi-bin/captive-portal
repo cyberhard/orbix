@@ -1,0 +1,62 @@
+#!/bin/sh
+# ORBIX Captive Portal API — RFC 8908
+echo "Status: 200 OK"
+echo "Content-Type: application/captive+json"
+echo "Cache-Control: private, no-cache, no-store, must-revalidate"
+echo ""
+
+CLIENT_IP="$REMOTE_ADDR"
+[ -z "$CLIENT_IP" ] && CLIENT_IP="127.0.0.1"
+
+# Check if KillSwitch is active or if policies block traffic
+IS_RESTRICTED=0
+CODE="402"
+
+if [ -f /etc/orbix/killswitch.json ]; then
+  KS=$(jsonfilter -i /etc/orbix/killswitch.json -e '@.enabled' 2>/dev/null)
+  if [ "$KS" = "true" ] || [ "$KS" = "1" ]; then
+    IS_RESTRICTED=1
+    CODE="410"
+  fi
+fi
+
+if [ -f /tmp/hosts/orbix_policy_blocks ]; then
+  IS_RESTRICTED=1
+  CODE="402"
+fi
+
+if [ -f /etc/orbix/captive.json ]; then
+  EN=$(jsonfilter -i /etc/orbix/captive.json -e '@.enabled' 2>/dev/null)
+  [ "$EN" != "true" ] && [ "$EN" != "1" ] && IS_RESTRICTED=0
+
+  # Check exemptions
+  if [ "$IS_RESTRICTED" = "1" ]; then
+    EX=$(jsonfilter -i /etc/orbix/captive.json -e "@.exempt_ips[@='$CLIENT_IP']" 2>/dev/null)
+    [ -n "$EX" ] && IS_RESTRICTED=0
+  fi
+fi
+
+PORTAL_HOST="192.168.1.1"
+if [ -f /etc/orbix/captive.json ]; then
+  DH=$(jsonfilter -i /etc/orbix/captive.json -e '@.portal_domain' 2>/dev/null)
+  [ -n "$DH" ] && PORTAL_HOST="$DH"
+fi
+
+if [ "$IS_RESTRICTED" = "1" ]; then
+  cat << EOF
+{
+  "captive": true,
+  "user-portal-url": "http://${PORTAL_HOST}/#/errors/${CODE}",
+  "venue-info-url": "http://${PORTAL_HOST}/",
+  "seconds-remaining": 3600,
+  "can-extend-session": false
+}
+EOF
+else
+  cat << EOF
+{
+  "captive": false,
+  "venue-info-url": "http://${PORTAL_HOST}/"
+}
+EOF
+fi

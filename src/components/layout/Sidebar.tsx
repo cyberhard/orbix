@@ -87,6 +87,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, onSelectRoute, i
             },
             { id: "clients", label: t.nav.connectedClients, icon: <Users className="h-4 w-4" /> },
             { id: "wireless", label: t.nav.wirelessRadios, icon: <Radio className="h-4 w-4" /> },
+            { id: "captive", label: lang === "ru" ? "Каптив-портал" : "Captive Portal", icon: <Radio className="h-4 w-4" />, badge: "RFC 8908" },
           ],
         },
         {
@@ -163,6 +164,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, onSelectRoute, i
             { id: "wireless", label: t.nav.wirelessRadios, icon: <Radio className="h-4 w-4" /> },
             { id: "dhcp", label: t.nav.dhcpDns, icon: <FileCode2 className="h-4 w-4" /> },
             { id: "firewall", label: t.nav.firewall, icon: <Shield className="h-4 w-4" /> },
+            { id: "captive", label: lang === "ru" ? "Каптив-портал" : "Captive Portal", icon: <Radio className="h-4 w-4" />, badge: "RFC 8908" },
             { id: "diagnostics", label: t.nav.diagnostics, icon: <Terminal className="h-4 w-4" /> },
           ],
         },

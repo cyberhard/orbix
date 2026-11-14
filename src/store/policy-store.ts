@@ -177,7 +177,15 @@ export const usePolicyStore = create<PolicyState>()(
           // 1. Arm Safety Watchdog Rollback
           const rollback = await ubusClient.armRollback(75);
 
-          // 2. Apply PBR Device & Domain Rules
+          // 2. Synchronize Domain & Action Policies to OpenWrt backend (nftables, dnsmasq, singbox)
+          await ubusClient.applyPolicyBackend({
+            blocked_domains: compiledConfig.blockedDomains || [],
+            direct_domains: compiledConfig.directDomains || [],
+            proxy_domains: compiledConfig.proxyDomains || [],
+            policies: get().policies.filter((p) => p.enabled),
+          });
+
+          // 3. Apply PBR Device & Domain Rules
           for (const rule of compiledConfig.pbrPolicies) {
             await ubusClient.setDeviceRoutingRule({
               ip: rule.src_addr || "",
@@ -187,7 +195,7 @@ export const usePolicyStore = create<PolicyState>()(
             });
           }
 
-          // 3. Confirm Rollback after verification
+          // 4. Confirm Rollback after verification
           if (rollback?.token) {
             await ubusClient.confirmRollback(rollback.token);
           }
