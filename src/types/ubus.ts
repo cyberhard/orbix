@@ -239,6 +239,10 @@ export interface ZapretProfile {
 }
 
 export interface PodkopConfig {
+  installed?: boolean | number;
+  running?: boolean | number;
+  status?: string;
+  message?: string;
   enabled: boolean;
   mode: "sing-box" | "byedpi" | "awg" | "mixed";
   outbound_interface: string;

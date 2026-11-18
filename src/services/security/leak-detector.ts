@@ -55,10 +55,10 @@ class LeakDetector {
       const wan = ifaces.find((i) => i.interface === "wan" || i.l3_device === "wan");
       const ispDns = wan?.dns_servers || [];
 
-      // Check /tmp/resolv.conf.auto safely without triggering ACL errors
+      // Check the live netifd resolver file safely (25.12: /tmp/resolv.conf.d/)
       let parsedIspServers: string[] = [];
       try {
-        const resolvAuto = await ubusClient.readFile("/tmp/resolv.conf.auto");
+        const resolvAuto = await ubusClient.readResolvConfAuto();
         parsedIspServers = resolvAuto
           .split("\n")
           .filter((l) => l.startsWith("nameserver"))

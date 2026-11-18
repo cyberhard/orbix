@@ -1,5 +1,5 @@
 import React from "react";
-import { Activity, LineChart, Users, Terminal, Shield, Sliders, Layers, Network, Radio, FileCode2, Cpu, Key, Package, RotateCw, Calendar, Save, Router, ChevronRight, Globe, X, Workflow, HelpCircle, Sparkles, SlidersHorizontal, BookmarkCheck, Server, Download, Wand2, Baby } from "lucide-react";
+import { Activity, Users, Terminal, Shield, Sliders, Network, Radio, FileCode2, Package, Save, Router, ChevronRight, X, Wand2, SlidersHorizontal, RotateCw, Baby } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18nStore } from "@/store/i18n-store";
 import { usePolicyStore } from "@/store/policy-store";
@@ -22,137 +22,67 @@ interface NavSection {
   }>;
 }
 
+// Technical sections hidden in Simple mode (interface/firewall/diagnostics/services/software)
+const EXPERT_ONLY = new Set(["interfaces", "firewall", "diagnostics", "services", "software"]);
+
 export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, onSelectRoute, isOpen }) => {
   const { t, lang } = useI18nStore();
   const { operatingMode } = usePolicyStore();
+  const isRu = lang === "ru";
 
-  const sections: NavSection[] = operatingMode === "simple"
-    ? [
+  // Target layout: 4 groups / 14 sections (Expert). Simple mode shows 9 by hiding the 5 technical ones.
+  const sections: NavSection[] = [
+    {
+      title: t.nav.groupOverview,
+      items: [
+        { id: "overview", label: t.nav.dashboard, icon: <Activity className="h-4 w-4" /> },
+        { id: "clients", label: t.nav.devicesMap, icon: <Users className="h-4 w-4" />, badge: "Map" },
+      ],
+    },
+    {
+      title: t.nav.groupTrafficBypass,
+      items: [
         {
-          title: lang === "ru" ? "Управление сетью" : "Network Control",
-          items: [
-            { id: "kid", label: lang === "ru" ? "Пульт для детей" : "Kids remote", icon: <Baby className="h-4 w-4" />, badge: "NEW" },
-            { id: "overview", label: t.nav.overview, icon: <Activity className="h-4 w-4" /> },
-            {
-              id: "policies",
-              label: lang === "ru" ? "Правила и маршруты" : "Routing Rules",
-              icon: <Sparkles className="h-4 w-4" />,
-              badge: "Smart",
-            },
-            {
-              id: "traffic",
-              label: t.nav.trafficTopology,
-              icon: <Workflow className="h-4 w-4" />,
-              badge: "Map",
-            },
-            {
-              id: "explain",
-              label: t.nav.explainRoute,
-              icon: <HelpCircle className="h-4 w-4" />,
-            },
-            {
-              id: "vpn",
-              label: lang === "ru" ? "VPN и Подписки" : "VPN & Services",
-              icon: <Shield className="h-4 w-4" />,
-              badge: "Failover",
-            },
-            { id: "clients", label: t.nav.connectedClients, icon: <Users className="h-4 w-4" /> },
-            { id: "wireless", label: t.nav.wirelessRadios, icon: <Radio className="h-4 w-4" /> },
-          ],
+          id: "policies",
+          label: operatingMode === "simple"
+            ? (isRu ? "Правила и маршруты" : "Routing Rules")
+            : t.nav.routingHub,
+          icon: <SlidersHorizontal className="h-4 w-4" />,
+          badge: operatingMode === "simple" ? "Smart" : "L1·L2·L3",
         },
-        {
-          title: lang === "ru" ? "Диагностика и Система" : "Diagnostics & System",
-          items: [
-            { id: "diagnostics", label: t.nav.diagnostics, icon: <Terminal className="h-4 w-4" /> },
-            { id: "bandwidth", label: t.nav.realtimeGraphs, icon: <LineChart className="h-4 w-4" /> },
-            { id: "logs", label: t.nav.systemLogs, icon: <Terminal className="h-4 w-4" /> },
-            { id: "backup", label: t.nav.backupFlash, icon: <Save className="h-4 w-4" />, badge: "Safe" },
-            { id: "admin", label: t.nav.adminSsh, icon: <Key className="h-4 w-4" /> },
-            { id: "general", label: t.nav.generalSettings, icon: <Cpu className="h-4 w-4" /> },
-            { id: "install", label: t.nav.installCatalog, icon: <Download className="h-4 w-4" />, badge: "Catalog" },
-          ],
-        },
-      ]
-    : [
-        {
-          title: t.nav.statusMonitoring,
-          items: [
-            { id: "kid", label: lang === "ru" ? "Пульт для детей" : "Kids remote", icon: <Baby className="h-4 w-4" /> },
-            { id: "overview", label: t.nav.overview, icon: <Activity className="h-4 w-4" /> },
-            {
-              id: "traffic",
-              label: t.nav.trafficTopology,
-              icon: <Workflow className="h-4 w-4" />,
-              badge: "Map",
-            },
-            {
-              id: "explain",
-              label: t.nav.explainRoute,
-              icon: <HelpCircle className="h-4 w-4" />,
-              badge: "Why?",
-            },
-            { id: "bandwidth", label: t.nav.realtimeGraphs, icon: <LineChart className="h-4 w-4" /> },
-            { id: "clients", label: t.nav.connectedClients, icon: <Users className="h-4 w-4" /> },
-            { id: "logs", label: t.nav.systemLogs, icon: <Terminal className="h-4 w-4" /> },
-          ],
-        },
-        {
-          title: t.nav.policyControl,
-          items: [
-            {
-              id: "policies",
-              label: t.nav.unifiedPolicies,
-              icon: <SlidersHorizontal className="h-4 w-4" />,
-              badge: "Engine",
-            },
-            {
-              id: "lists",
-              label: t.nav.categoryFeeds,
-              icon: <BookmarkCheck className="h-4 w-4" />,
-              badge: "Feeds",
-            },
-            {
-              id: "dns",
-              label: t.nav.dnsCenter,
-              icon: <Server className="h-4 w-4" />,
-              badge: "Smart",
-            },
-            { id: "pbr", label: t.nav.policyRouting, icon: <Network className="h-4 w-4" />, badge: "PBR" },
-            { id: "routing-tiers", label: t.nav.tierEngine, icon: <Network className="h-4 w-4" />, badge: "L1·L2·L3" },
-            { id: "zapret", label: t.nav.zapretBuilder, icon: <Sliders className="h-4 w-4" /> },
-            { id: "podkop", label: t.nav.podkopServices, icon: <Layers className="h-4 w-4" /> },
-          ],
-        },
-        {
-          title: t.nav.circumventionVpn,
-          items: [
-            { id: "vpn", label: t.nav.vpnManager, icon: <Shield className="h-4 w-4" />, badge: "Groups" },
-            { id: "subscriptions", label: t.nav.subscriptions, icon: <Globe className="h-4 w-4" />, badge: "Happ" },
-          ],
-        },
-        {
-          title: t.nav.network,
-          items: [
-            { id: "interfaces", label: t.nav.interfacesVlans, icon: <Network className="h-4 w-4" /> },
-            { id: "wireless", label: t.nav.wirelessRadios, icon: <Radio className="h-4 w-4" /> },
-            { id: "dhcp", label: t.nav.dhcpDns, icon: <FileCode2 className="h-4 w-4" /> },
-            { id: "firewall", label: t.nav.firewall, icon: <Shield className="h-4 w-4" /> },
-            { id: "diagnostics", label: t.nav.diagnostics, icon: <Terminal className="h-4 w-4" /> },
-          ],
-        },
-        {
-          title: t.nav.system,
-          items: [
-            { id: "general", label: t.nav.generalSettings, icon: <Cpu className="h-4 w-4" /> },
-            { id: "admin", label: t.nav.adminSsh, icon: <Key className="h-4 w-4" /> },
-            { id: "software", label: t.nav.softwarePackages, icon: <Package className="h-4 w-4" /> },
-            { id: "services", label: t.nav.startupServices, icon: <RotateCw className="h-4 w-4" /> },
-            { id: "tasks", label: t.nav.scheduledTasks, icon: <Calendar className="h-4 w-4" /> },
-            { id: "backup", label: t.nav.backupFlash, icon: <Save className="h-4 w-4" /> },
-            { id: "install", label: t.nav.installCatalog, icon: <Download className="h-4 w-4" />, badge: "Catalog" },
-          ],
-        },
-      ];
+        { id: "vpn", label: t.nav.vpnSubs, icon: <Shield className="h-4 w-4" />, badge: "Happ" },
+        { id: "zapret", label: t.nav.zapretBuilder, icon: <Sliders className="h-4 w-4" /> },
+        { id: "kid", label: isRu ? "Пульт для детей" : "Kids remote", icon: <Baby className="h-4 w-4" />, badge: "NEW" },
+      ],
+    },
+    {
+      title: t.nav.network,
+      items: [
+        { id: "interfaces", label: t.nav.interfacesVlans, icon: <Network className="h-4 w-4" /> },
+        { id: "wireless", label: t.nav.wirelessRadios, icon: <Radio className="h-4 w-4" /> },
+        { id: "dhcp", label: t.nav.dhcpDns, icon: <FileCode2 className="h-4 w-4" /> },
+        { id: "firewall", label: t.nav.firewall, icon: <Shield className="h-4 w-4" /> },
+      ],
+    },
+    {
+      title: t.nav.system,
+      items: [
+        { id: "diagnostics", label: t.nav.diagnosticsLogs, icon: <Terminal className="h-4 w-4" /> },
+        { id: "services", label: t.nav.servicesTasks, icon: <RotateCw className="h-4 w-4" /> },
+        { id: "software", label: t.nav.softwarePackages, icon: <Package className="h-4 w-4" /> },
+        { id: "settings", label: t.nav.settingsBackup, icon: <Save className="h-4 w-4" />, badge: "Safe" },
+      ],
+    },
+  ];
+
+  const visibleSections = sections
+    .map((section) => ({
+      ...section,
+      items: operatingMode === "simple"
+        ? section.items.filter((item) => !EXPERT_ONLY.has(item.id))
+        : section.items,
+    }))
+    .filter((section) => section.items.length > 0);
 
   return (
     <>
@@ -199,7 +129,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, onSelectRoute, i
 
         {/* Nav items list */}
         <div className="flex-1 overflow-y-auto px-3 py-3 space-y-5">
-          {sections.map((section) => (
+          {visibleSections.map((section) => (
             <div key={section.title} className="space-y-1">
               <h4 className="px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
                 {section.title}

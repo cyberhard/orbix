@@ -66,6 +66,44 @@ sh -c "$(wget -qO- https://raw.githubusercontent.com/cyberhard/orbix/main/script
 
 ---
 
+## Navigation (14 sections)
+
+Expert mode shows 4 groups / 14 sidebar sections; Simple mode hides the 5 technical ones (`#/interfaces`, `#/firewall`, `#/diagnostics`, `#/services`, `#/software`), leaving 9.
+
+| Group | Section | What it contains |
+|---|---|---|
+| Обзор | `#/overview` | System dashboard + real-time interface throughput graphs |
+| | `#/clients` | Interactive SVG topology map + connected devices table with static DHCP leases |
+| Трафик и обход | `#/policies` | Tabs: **L1·L2·L3 routing tiers**, **Policies & PBR**, **Domain lists** |
+| | `#/vpn` | Happ subscription block on top, then AmneziaWG / VLESS nodes / Groups / Killswitch |
+| | `#/zapret` | Zapret2 strategy builder, health, autotest, watchdog |
+| | `#/kid` | Kids remote: parental control, schedules, blocklists |
+| Сеть | `#/interfaces` | netifd interfaces, live stats, restart |
+| | `#/wireless` | Radios, SSID/security/QR, clients, wifi reload |
+| | `#/dhcp` | Tabs: **DHCP pools & statics**, **DNS upstreams & leak guard** |
+| | `#/firewall` | fw4 zones, rules, port forwards, panel nft tables |
+| Система | `#/diagnostics` | Tabs: **Why this route?** explainer, **Ping/Traceroute/nslookup**, **logread** |
+| | `#/services` | Tabs: init autostart, Podkop (when installed), crontab |
+| | `#/software` | `apk` package manager |
+| | `#/settings` | Tabs: **General**, **SSH & access**, **Backup & rollback**, **Devices & firmware** |
+
+Legacy URLs keep working and redirect onto the hubs (the client rewrites the hash):
+
+```
+#/bandwidth → #/overview          #/traffic → #/clients
+#/routing-tiers → #/policies?tab=tiers    #/pbr → #/policies?tab=pbr
+#/lists → #/policies?tab=lists    #/subscriptions → #/vpn?tab=subscriptions
+#/dns → #/dhcp?tab=dns            #/explain → #/diagnostics?tab=explain
+#/logs → #/diagnostics?tab=logs   #/podkop → #/services?tab=podkop
+#/tasks → #/services?tab=cron     #/general → #/settings?tab=general
+#/admin|#/ssh → #/settings?tab=admin      #/backup → #/settings?tab=backup
+#/install → #/settings?tab=install
+```
+
+Ctrl+K opens the command palette; searching old names («Подписки», «Логи», «PBR», «SSH», «Бэкап»…) jumps to the right hub tab.
+
+---
+
 ## Interface Previews
 
 ### 1. Interactive Network Topology & Infrastructure Map (`#/traffic`)

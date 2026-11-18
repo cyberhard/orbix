@@ -31,7 +31,7 @@ async function loadDnsState() {
 
   let resolvAutoIsp: string[] = [];
   try {
-    const resolvAuto = await ubusClient.readFile("/tmp/resolv.conf.auto");
+    const resolvAuto = await ubusClient.readResolvConfAuto();
     resolvAutoIsp = resolvAuto
       .split("\n")
       .filter((l) => l.trim().startsWith("nameserver"))

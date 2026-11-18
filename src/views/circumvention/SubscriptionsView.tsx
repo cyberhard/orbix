@@ -35,7 +35,12 @@ import {
 } from "lucide-react";
 import { formatBytes } from "@/lib/utils";
 
-export const SubscriptionsView: React.FC = () => {
+interface SubscriptionsViewProps {
+  /** Rendered inside another page (VPN hub): hides the standalone page title. */
+  embedded?: boolean;
+}
+
+export const SubscriptionsView: React.FC<SubscriptionsViewProps> = ({ embedded = false }) => {
   const {url, apiKey, metadata, nodes, activeNodeId, isSyncing, isTestingLatency, error, syncSubscription, setActiveNode, setSelectionMode, setAutoUpdateInterval, testAllLatencies, deleteSubscription, hydrateFromRouterCache} = useSubscriptionStore();
 
   const { language } = useI18nStore();
@@ -127,6 +132,7 @@ export const SubscriptionsView: React.FC = () => {
     <div className="space-y-6 animate-in fade-in-50 duration-200">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
+        {!embedded && (
         <div>
           <h1 className="text-lg font-semibold tracking-tight text-zinc-100 flex items-center gap-2">
             <Globe className="h-5 w-5 text-zinc-400" />
@@ -138,6 +144,7 @@ export const SubscriptionsView: React.FC = () => {
               : "Encrypted subscriptions decoding, automated Sing-box VLESS synchronization, and quota management"}
           </p>
         </div>
+        )}
 
         <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
           {url && (

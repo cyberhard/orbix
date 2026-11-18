@@ -1,3 +1,7 @@
+// ORBIX • MainLayout — hash router with a 14-section navigation and legacy URL redirects.
+// Canonical routes: overview, clients, policies, vpn, zapret, kid, interfaces, wireless,
+// dhcp, firewall, diagnostics, services, software, settings (+ wizard modal).
+// Old routes redirect onto the new hubs, e.g. #/subscriptions -> #/vpn?tab=subscriptions.
 import React, { useState, Suspense } from "react";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
@@ -11,172 +15,44 @@ import { usePolicyStore } from "@/store/policy-store";
 // Views
 import { Overview } from "@/views/status/Overview";
 import { BandwidthGraph } from "@/views/status/BandwidthGraph";
-import { ConnectedClients } from "@/views/status/ConnectedClients";
-import { SystemLogs } from "@/views/status/SystemLogs";
 import { TrafficFlow } from "@/views/traffic/TrafficFlow";
-import { ExplainRoute } from "@/views/traffic/ExplainRoute";
-import { PolicyEngineView } from "@/views/expert/PolicyEngineView";
-import { SimplePolicyManager } from "@/views/simple/SimplePolicyManager";
-import { CategoryListManager } from "@/views/lists/CategoryListManager";
-import { DnsRoutingCenter } from "@/views/dns/DnsRoutingCenter";
-import { VpnManager } from "@/views/circumvention/VpnManager";
-import { SubscriptionsView } from "@/views/circumvention/SubscriptionsView";
+import { ConnectedClients } from "@/views/status/ConnectedClients";
+import { RoutingHubPage } from "@/views/hubs/RoutingHubPage";
+import { VpnHubPage } from "@/views/hubs/VpnHubPage";
+import { NetworkHubPage } from "@/views/hubs/NetworkHubPage";
+import { DiagnosticsHubPage } from "@/views/hubs/DiagnosticsHubPage";
+import { ServicesHubPage } from "@/views/hubs/ServicesHubPage";
+import { SettingsHubPage } from "@/views/hubs/SettingsHubPage";
 import { ZapretStrategyBuilder } from "@/views/circumvention/ZapretStrategyBuilder";
-import { RoutingEngineView } from "@/views/circumvention/RoutingEngineView";
-import { PodkopView } from "@/views/circumvention/PodkopView";
-import { PbrView } from "@/views/circumvention/PbrView";
+import { KidView } from "@/views/kid/KidView";
 import { Interfaces } from "@/views/network/Interfaces";
 import { Wireless } from "@/views/network/Wireless";
-import { DhcpDns } from "@/views/network/DhcpDns";
 import { Firewall } from "@/views/network/Firewall";
-import { Diagnostics } from "@/views/network/Diagnostics";
-import { GeneralSettings } from "@/views/system/GeneralSettings";
-import { Administration } from "@/views/system/Administration";
 import { Software } from "@/views/system/Software";
-import { StartupServices } from "@/views/system/StartupServices";
-import { ScheduledTasks } from "@/views/system/ScheduledTasks";
-import { BackupFlash } from "@/views/system/BackupFlash";
-import { HardwareCatalog } from "@/views/install/HardwareCatalog";
-import { KidView } from "@/views/kid/KidView";
 import { SetupWizardModal } from "@/views/wizard/SetupWizardModal";
 import { useWizardStore } from "@/services/wizard/wizard-store";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { canonicalHashFromLocation } from "@/lib/routing";
 
 export const MainLayout: React.FC = () => {
-  // Read initial route from URL hash (e.g. #/subscriptions, #/wireless, #/traffic, #/system/backup)
-  const getRouteFromHash = (): string => {
-    if (typeof window === "undefined") return "overview";
-    let raw = window.location.hash.replace(/^#\/?/, "").toLowerCase().trim();
-    raw = raw.split("?")[0].replace(/\/+$/, "");
-    if (!raw) return "overview";
+  const initial = canonicalHashFromLocation(typeof window !== "undefined" ? window.location.hash : "");
+  const baseFromCanonical = (c: string) => (c.split("?")[0] || "overview") as string;
 
-    const segments = raw.split("/").filter(Boolean);
-    const lastSegment = segments[segments.length - 1] || "overview";
-    const fullNormalized = segments.join("/");
-
-    const routeMap: Record<string, string> = {
-      // Status
-      "overview": "overview",
-      "status": "overview",
-      "status/overview": "overview",
-      "graphs": "bandwidth",
-      "realtime": "bandwidth",
-      "bandwidth": "bandwidth",
-      "status/bandwidth": "bandwidth",
-      "status/graphs": "bandwidth",
-      "devices": "clients",
-      "leases": "clients",
-      "clients": "clients",
-      "status/clients": "clients",
-      "logs": "logs",
-      "syslog": "logs",
-      "status/logs": "logs",
-
-      // Traffic
-      "traffic": "traffic",
-      "flow": "traffic",
-      "topology": "traffic",
-      "traffic/flow": "traffic",
-      "traffic/topology": "traffic",
-      "explain": "explain",
-      "diagnose-route": "explain",
-      "why": "explain",
-      "traffic/explain": "explain",
-
-      // Policy & Lists
-      "policies": "policies",
-      "policy": "policies",
-      "rules": "policies",
-      "policy-rules": "policies",
-      "expert/policies": "policies",
-      "simple/policies": "policies",
-      "lists": "lists",
-      "categories": "lists",
-      "feeds": "lists",
-      "dns": "dns",
-      "smartdns": "dns",
-      "dns-routing": "dns",
-
-      // Circumvention
-      "vpn": "vpn",
-      "vpns": "vpn",
-      "vpn-manager": "vpn",
-      "circumvention/vpn": "vpn",
-      "subs": "subscriptions",
-      "sub": "subscriptions",
-      "happ": "subscriptions",
-      "subscriptions": "subscriptions",
-      "circumvention/subscriptions": "subscriptions",
-      "zapret": "zapret",
-      "circumvention/zapret": "zapret",
-      "podkop": "podkop",
-      "circumvention/podkop": "podkop",
-      "pbr": "pbr",
-      "circumvention/pbr": "pbr",
-
-      // Network
-      "interfaces": "interfaces",
-      "vlans": "interfaces",
-      "network/interfaces": "interfaces",
-      "wifi": "wireless",
-      "wireless": "wireless",
-      "network/wireless": "wireless",
-      "network/wifi": "wireless",
-      "dhcp": "dhcp",
-      "dhcp-dns": "dhcp",
-      "network/dhcp": "dhcp",
-      "fw": "firewall",
-      "firewall": "firewall",
-      "firewall-rules": "firewall",
-      "network/firewall": "firewall",
-      "diagnostics": "diagnostics",
-      "diag": "diagnostics",
-      "network/diagnostics": "diagnostics",
-
-      // System
-      "general": "general",
-      "settings": "general",
-      "system/general": "general",
-      "admin": "admin",
-      "ssh": "admin",
-      "password": "admin",
-      "system/admin": "admin",
-      "software": "software",
-      "packages": "software",
-      "opkg": "software",
-      "apk": "software",
-      "system/software": "software",
-      "services": "services",
-      "startup": "services",
-      "init": "services",
-      "system/services": "services",
-      "tasks": "tasks",
-      "cron": "tasks",
-      "crontab": "tasks",
-      "system/tasks": "tasks",
-      "backup": "backup",
-      "flash": "backup",
-      "restore": "backup",
-      "system/backup": "backup",
-      "system/flash": "backup",
-
-      // Install & Wizard
-      "install": "install",
-      "catalog": "install",
-      "firmware": "install",
-      "devices-catalog": "install",
-      "wizard": "wizard",
-      "setup": "wizard",
-    };
-
-    return routeMap[fullNormalized] || routeMap[lastSegment] || routeMap[raw] || "overview";
-  };
-
-  const [currentRoute, setCurrentRouteState] = useState<string>(getRouteFromHash());
+  const [currentRoute, setCurrentRouteState] = useState<string>(() =>
+    initial === "wizard" ? "overview" : baseFromCanonical(initial)
+  );
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const { t, lang } = useI18nStore();
   const { operatingMode } = usePolicyStore();
+
+  const applyCanonical = (canonical: string) => {
+    if (canonical === "wizard") {
+      useWizardStore.getState().openWizard();
+      return;
+    }
+    setCurrentRouteState(baseFromCanonical(canonical));
+  };
 
   const navigateTo = (route: string) => {
     if (route === "wizard") {
@@ -184,132 +60,99 @@ export const MainLayout: React.FC = () => {
       return;
     }
     if (typeof window !== "undefined") {
-      window.location.hash = `#/${route}`;
+      // assigning the hash triggers hashchange -> canonicalization below
+      const next = `#/${route}`;
+      if (window.location.hash === next) {
+        applyCanonical(canonicalHashFromLocation(next));
+      } else {
+        window.location.hash = next;
+      }
     }
-    setCurrentRouteState(route);
   };
 
   React.useEffect(() => {
-    const onHashChange = () => {
-      const route = getRouteFromHash();
-      if (route === "wizard") {
-        useWizardStore.getState().openWizard();
+    const sync = () => {
+      const canonical = canonicalHashFromLocation(window.location.hash);
+      // rewrite legacy URLs onto their canonical form without adding history entries
+      const wantHash = canonical === "wizard" ? "#/wizard" : `#/${canonical}`;
+      if (window.location.hash !== wantHash) {
+        window.history.replaceState(null, "", wantHash);
       }
-      setCurrentRouteState(route);
+      applyCanonical(canonical);
     };
-    window.addEventListener("hashchange", onHashChange);
+    window.addEventListener("hashchange", sync);
 
-    // Auto-launch wizard if requested in hash or first-run
-    const initialRoute = getRouteFromHash();
-    if (initialRoute === "wizard") {
-      useWizardStore.getState().openWizard();
-    }
-
-    // If no hash present, default to #/overview
     if (window.location.hash === "" || window.location.hash === "#") {
       window.location.hash = "#/overview";
+    } else {
+      sync();
     }
-    return () => window.removeEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", sync);
   }, []);
 
   const getRouteTitle = (route: string) => {
     switch (route) {
-      case "overview": return t.nav.overview;
-      case "traffic": return t.nav.trafficTopology;
-      case "explain": return t.nav.explainRoute;
+      case "overview": return t.nav.dashboard;
+      case "clients": return t.nav.devicesMap;
       case "policies":
         return operatingMode === "simple"
           ? (lang === "ru" ? "Правила и маршруты" : "Routing Rules")
-          : t.nav.unifiedPolicies;
-      case "lists": return t.nav.categoryFeeds;
-      case "dns": return t.nav.dnsCenter;
-      case "bandwidth": return t.nav.realtimeGraphs;
-      case "clients": return t.nav.connectedClients;
-      case "logs": return t.nav.systemLogs;
-      case "vpn": return t.nav.vpnManager;
-      case "subscriptions": return t.nav.subscriptions;
+          : t.nav.routingHub;
+      case "vpn": return t.nav.vpnSubs;
       case "zapret": return t.nav.zapretBuilder;
-      case "podkop": return t.nav.podkopServices;
-      case "pbr": return t.nav.policyRouting;
       case "interfaces": return t.nav.interfacesVlans;
       case "wireless": return t.nav.wirelessRadios;
       case "dhcp": return t.nav.dhcpDns;
       case "firewall": return t.nav.firewall;
-      case "diagnostics": return t.nav.diagnostics;
-      case "general": return t.nav.generalSettings;
-      case "admin": return t.nav.adminSsh;
+      case "diagnostics": return t.nav.diagnosticsLogs;
+      case "services": return t.nav.servicesTasks;
       case "software": return t.nav.softwarePackages;
-      case "services": return t.nav.startupServices;
-      case "tasks": return t.nav.scheduledTasks;
-      case "backup": return t.nav.backupFlash;
-      case "install": return t.nav.installCatalog;
+      case "settings": return t.nav.settingsBackup;
       case "kid": return lang === "ru" ? "Пульт для детей" : "Kids remote";
-      case "wizard": return t.nav.setupWizard;
-      default:
-        return t.nav.overview;
+      default: return t.nav.overview;
     }
   };
 
   const renderView = () => {
     switch (currentRoute) {
       case "overview":
-        return <Overview />;
-      case "traffic":
-        return <TrafficFlow />;
-      case "explain":
-        return <ExplainRoute />;
-      case "policies":
-        return operatingMode === "simple" ? <SimplePolicyManager /> : <PolicyEngineView />;
-      case "routing-tiers":
-        return <RoutingEngineView />;
-      case "lists":
-        return <CategoryListManager />;
-      case "dns":
-        return <DnsRoutingCenter />;
-      case "bandwidth":
-        return <BandwidthGraph />;
+        return (
+          <div className="space-y-6">
+            <Overview />
+            <BandwidthGraph />
+          </div>
+        );
       case "clients":
-        return <ConnectedClients />;
-      case "logs":
-        return <SystemLogs />;
+        return (
+          <div className="space-y-6">
+            <TrafficFlow />
+            <ConnectedClients />
+          </div>
+        );
+      case "policies":
+        return <RoutingHubPage />;
       case "vpn":
-        return <VpnManager />;
-      case "subscriptions":
-        return <SubscriptionsView />;
+        return <VpnHubPage />;
       case "zapret":
         return <ZapretStrategyBuilder />;
-      case "podkop":
-        return <PodkopView />;
-      case "pbr":
-        return <PbrView />;
+      case "kid":
+        return <KidView />;
       case "interfaces":
         return <Interfaces />;
       case "wireless":
         return <Wireless />;
       case "dhcp":
-        return <DhcpDns />;
+        return <NetworkHubPage />;
       case "firewall":
         return <Firewall />;
       case "diagnostics":
-        return <Diagnostics />;
-      case "general":
-        return <GeneralSettings />;
-      case "admin":
-        return <Administration />;
+        return <DiagnosticsHubPage />;
+      case "services":
+        return <ServicesHubPage />;
       case "software":
         return <Software />;
-      case "services":
-        return <StartupServices />;
-      case "tasks":
-        return <ScheduledTasks />;
-      case "backup":
-        return <BackupFlash />;
-      case "install":
-        return <HardwareCatalog />;
-      case "kid":
-        return <KidView />;
-      case "wizard":
-        return <HardwareCatalog />;
+      case "settings":
+        return <SettingsHubPage />;
       default:
         return <Overview />;
     }
@@ -353,6 +196,7 @@ export const MainLayout: React.FC = () => {
       <CommandPalette
         isOpen={paletteOpen}
         onClose={() => setPaletteOpen(false)}
+        onOpen={() => setPaletteOpen(true)}
         onSelectRoute={(r) => {
           navigateTo(r);
           setPaletteOpen(false);

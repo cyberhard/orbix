@@ -34,6 +34,31 @@ class UbusClient {
     return this.sessionId !== "00000000000000000000000000000000" && !!this.sessionId;
   }
 
+  /**
+   * -32002 / UBUS_STATUS 6 often means "ACL denied this method", not "session expired".
+   * Only force logout when the session itself no longer answers session.access.
+   */
+  private async sessionStillValid(): Promise<boolean> {
+    try {
+      const res = await fetch(this.endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: this.reqId++,
+          method: "call",
+          params: [this.sessionId, "session", "access", {}],
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) return false;
+      const json = await res.json();
+      return Array.isArray(json?.result) && json.result[0] === 0;
+    } catch {
+      return false;
+    }
+  }
+
   private handleAuthExpired(): void {
     this.sessionId = "00000000000000000000000000000000";
     if (typeof window !== "undefined") {
@@ -103,8 +128,12 @@ class UbusClient {
           json.error.code === -32002 ||
           json.error.message?.toLowerCase().includes("permission denied")
         ) {
-          this.handleAuthExpired();
-          throw new Error("Access denied: session expired or unauthorized");
+          if (!(await this.sessionStillValid())) {
+            this.handleAuthExpired();
+            throw new Error("Access denied: session expired or unauthorized");
+          }
+          // Session is alive — this specific method is just blocked by router ACL
+          throw new Error(`Access denied by router ACL for ${object}.${method}`);
         }
         throw new Error(json.error.message || `Ubus error ${json.error.code}`);
       }
@@ -116,7 +145,11 @@ class UbusClient {
       const [status, data] = json.result;
       if (status !== 0) {
         if (status === 6) {
-          // UBUS_STATUS_PERMISSION_DENIED
+          // UBUS_STATUS_NOT_FOUND / PERMISSION_DENIED: could be a missing file
+          // or an ACL-blocked method — only log out when the session is truly dead.
+          if (await this.sessionStillValid()) {
+            throw new Error(`Ubus call ${object}.${method} failed: file not found or not readable`);
+          }
           this.handleAuthExpired();
           throw new Error("Session expired. Please log in again.");
         }
@@ -968,11 +1001,28 @@ class UbusClient {
       const res = await this.call<{ data?: string }>("file", "read", { path });
       return res.data || "";
     } catch (e: any) {
-      if (e?.message?.includes("Not found") || e?.message?.includes("-32000")) {
+      const msg = String(e?.message || "");
+      if (msg.includes("Not found") || msg.includes("-32000") || msg.includes("not found or not readable")) {
         return "";
       }
       throw e;
     }
+  }
+
+  /**
+   * netifd resolver file: OpenWrt 25.12 moved it to /tmp/resolv.conf.d/,
+   * older releases keep /tmp/resolv.conf.auto. Returns "" when neither exists.
+   */
+  public async readResolvConfAuto(): Promise<string> {
+    for (const path of ["/tmp/resolv.conf.d/resolv.conf.auto", "/tmp/resolv.conf.auto"]) {
+      try {
+        const data = await this.readFile(path);
+        if (data) return data;
+      } catch {
+        // missing/forbidden path — try the next candidate
+      }
+    }
+    return "";
   }
 
   public async writeFile(path: string, data: string): Promise<void> {

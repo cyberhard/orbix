@@ -24,8 +24,21 @@
 					"watchdog_status",
 					"tiers_status",
 					"tiers_get"
+				],
+				"file": [
+					"read",
+					"stat",
+					"list",
+					"md5"
 				]
-			}
+			},
+			"read-files": [
+				"/tmp/resolv.conf.d/resolv.conf.auto",
+				"/tmp/resolv.conf.auto",
+				"/etc/crontabs/root",
+				"/etc/dropbear/authorized_keys",
+				"/tmp/orbix/*"
+			]
 		},
 		"write": {
 			"ubus": {
@@ -70,8 +83,20 @@
 					"tiers_stage",
 					"tiers_commit",
 					"tiers_disable"
+				],
+				"file": [
+					"write",
+					"put",
+					"mkdir",
+					"remove",
+					"rename"
 				]
-			}
+			},
+			"write-files": [
+				"/etc/dropbear/authorized_keys",
+				"/etc/crontabs/root",
+				"/tmp/orbix/*"
+			]
 		}
 	}
 }

@@ -1,164 +1,79 @@
+// ORBIX • Route canonicalization tests — every legacy hash must land on the new
+// 14-section hub layout with the correct ?tab= deep link.
 import { describe, it, expect } from "vitest";
+import { canonicalHashFromLocation } from "@/lib/routing";
 
-describe("ORBIX Universal Route Normalizer", () => {
-  const normalizeRoute = (rawHash: string): string => {
-    let raw = rawHash.replace(/^#\/?/, "").toLowerCase().trim();
-    raw = raw.split("?")[0].replace(/\/+$/, "");
-    if (!raw) return "overview";
+const c = (hash: string) => canonicalHashFromLocation(hash);
 
-    const segments = raw.split("/").filter(Boolean);
-    const lastSegment = segments[segments.length - 1] || "overview";
-    const fullNormalized = segments.join("/");
-
-    const routeMap: Record<string, string> = {
-      // Status
-      overview: "overview",
-      status: "overview",
-      "status/overview": "overview",
-      graphs: "bandwidth",
-      realtime: "bandwidth",
-      bandwidth: "bandwidth",
-      "status/bandwidth": "bandwidth",
-      "status/graphs": "bandwidth",
-      devices: "clients",
-      leases: "clients",
-      clients: "clients",
-      "status/clients": "clients",
-      logs: "logs",
-      syslog: "logs",
-      "status/logs": "logs",
-
-      // Traffic
-      traffic: "traffic",
-      flow: "traffic",
-      topology: "traffic",
-      "traffic/flow": "traffic",
-      "traffic/topology": "traffic",
-      explain: "explain",
-      "diagnose-route": "explain",
-      why: "explain",
-      "traffic/explain": "explain",
-
-      // Policy & Lists
-      policies: "policies",
-      policy: "policies",
-      rules: "policies",
-      "policy-rules": "policies",
-      "expert/policies": "policies",
-      "simple/policies": "policies",
-      lists: "lists",
-      categories: "lists",
-      feeds: "lists",
-      dns: "dns",
-      smartdns: "dns",
-      "dns-routing": "dns",
-
-      // Circumvention
-      vpn: "vpn",
-      vpns: "vpn",
-      "vpn-manager": "vpn",
-      "circumvention/vpn": "vpn",
-      subs: "subscriptions",
-      sub: "subscriptions",
-      happ: "subscriptions",
-      subscriptions: "subscriptions",
-      "circumvention/subscriptions": "subscriptions",
-      zapret: "zapret",
-      "circumvention/zapret": "zapret",
-      podkop: "podkop",
-      "circumvention/podkop": "podkop",
-      pbr: "pbr",
-      "circumvention/pbr": "pbr",
-
-      // Network
-      interfaces: "interfaces",
-      vlans: "interfaces",
-      "network/interfaces": "interfaces",
-      wifi: "wireless",
-      wireless: "wireless",
-      "network/wireless": "wireless",
-      "network/wifi": "wireless",
-      dhcp: "dhcp",
-      "dhcp-dns": "dhcp",
-      "network/dhcp": "dhcp",
-      fw: "firewall",
-      firewall: "firewall",
-      "firewall-rules": "firewall",
-      "network/firewall": "firewall",
-      diagnostics: "diagnostics",
-      diag: "diagnostics",
-      "network/diagnostics": "diagnostics",
-
-      // System
-      general: "general",
-      settings: "general",
-      "system/general": "general",
-      admin: "admin",
-      ssh: "admin",
-      password: "admin",
-      "system/admin": "admin",
-      software: "software",
-      packages: "software",
-      opkg: "software",
-      apk: "software",
-      "system/software": "software",
-      services: "services",
-      startup: "services",
-      init: "services",
-      "system/services": "services",
-      tasks: "tasks",
-      cron: "tasks",
-      crontab: "tasks",
-      "system/tasks": "tasks",
-      backup: "backup",
-      flash: "backup",
-      restore: "backup",
-      "system/backup": "backup",
-      "system/flash": "backup",
-
-      // Install & Wizard
-      install: "install",
-      catalog: "install",
-      firmware: "install",
-      "devices-catalog": "install",
-      wizard: "wizard",
-      setup: "wizard",
-    };
-
-    return routeMap[fullNormalized] || routeMap[lastSegment] || routeMap[raw] || "overview";
-  };
-
-  it("should normalize simple routes correctly", () => {
-    expect(normalizeRoute("#/overview")).toBe("overview");
-    expect(normalizeRoute("#/backup")).toBe("backup");
-    expect(normalizeRoute("#/wireless")).toBe("wireless");
-    expect(normalizeRoute("#/vpn")).toBe("vpn");
+describe("ORBIX canonical router", () => {
+  it("keeps canonical hubs as-is", () => {
+    expect(c("")).toBe("overview");
+    expect(c("#")).toBe("overview");
+    expect(c("#/")).toBe("overview");
+    expect(c("#/overview")).toBe("overview");
+    expect(c("#/clients")).toBe("clients");
+    expect(c("#/policies")).toBe("policies");
+    expect(c("#/vpn")).toBe("vpn");
+    expect(c("#/zapret")).toBe("zapret");
+    expect(c("#/kid")).toBe("kid");
+    expect(c("#/interfaces")).toBe("interfaces");
+    expect(c("#/wireless")).toBe("wireless");
+    expect(c("#/dhcp")).toBe("dhcp");
+    expect(c("#/firewall")).toBe("firewall");
+    expect(c("#/diagnostics")).toBe("diagnostics");
+    expect(c("#/services")).toBe("services");
+    expect(c("#/software")).toBe("software");
   });
 
-  it("should resolve nested LuCI and category paths", () => {
-    expect(normalizeRoute("#/system/backup")).toBe("backup");
-    expect(normalizeRoute("#/system/admin")).toBe("admin");
-    expect(normalizeRoute("#/system/software")).toBe("software");
-    expect(normalizeRoute("#/system/services")).toBe("services");
-    expect(normalizeRoute("#/network/interfaces")).toBe("interfaces");
-    expect(normalizeRoute("#/network/wireless")).toBe("wireless");
-    expect(normalizeRoute("#/network/firewall")).toBe("firewall");
-    expect(normalizeRoute("#/network/dhcp")).toBe("dhcp");
-    expect(normalizeRoute("#/status/logs")).toBe("logs");
-    expect(normalizeRoute("#/status/overview")).toBe("overview");
-    expect(normalizeRoute("#/circumvention/vpn")).toBe("vpn");
-    expect(normalizeRoute("#/circumvention/zapret")).toBe("zapret");
+  it("redirects merged Overview sections", () => {
+    expect(c("#/bandwidth")).toBe("overview");
+    expect(c("#/graphs")).toBe("overview");
+    expect(c("#/status/bandwidth")).toBe("overview");
+    expect(c("#/traffic")).toBe("clients");
+    expect(c("#/topology")).toBe("clients");
+    expect(c("#/devices")).toBe("clients");
   });
 
-  it("should strip query parameters and trailing slashes safely", () => {
-    expect(normalizeRoute("#/backup?tab=expert&lang=ru")).toBe("backup");
-    expect(normalizeRoute("#/network/wireless/?ref=overview")).toBe("wireless");
-    expect(normalizeRoute("#/system/backup/")).toBe("backup");
+  it("redirects Routing hub sections with tabs", () => {
+    expect(c("#/routing-tiers")).toBe("policies?tab=tiers");
+    expect(c("#/pbr")).toBe("policies?tab=pbr");
+    expect(c("#/circumvention/pbr")).toBe("policies?tab=pbr");
+    expect(c("#/lists")).toBe("policies?tab=lists");
+    expect(c("#/categories")).toBe("policies?tab=lists");
+    expect(c("#/policies?tab=lists")).toBe("policies?tab=lists");
+    expect(c("#/expert/policies")).toBe("policies");
   });
 
-  it("should fallback cleanly on unknown routes to overview", () => {
-    expect(normalizeRoute("#/some/unknown/path")).toBe("overview");
-    expect(normalizeRoute("")).toBe("overview");
-    expect(normalizeRoute("#")).toBe("overview");
+  it("redirects VPN, DNS, Diagnostics, Services, Settings with tabs", () => {
+    expect(c("#/subscriptions")).toBe("vpn?tab=subscriptions");
+    expect(c("#/happ")).toBe("vpn?tab=subscriptions");
+    expect(c("#/dns")).toBe("dhcp?tab=dns");
+    expect(c("#/explain")).toBe("diagnostics?tab=explain");
+    expect(c("#/logs")).toBe("diagnostics?tab=logs");
+    expect(c("#/status/logs")).toBe("diagnostics?tab=logs");
+    expect(c("#/podkop")).toBe("services?tab=podkop");
+    expect(c("#/tasks")).toBe("services?tab=cron");
+    expect(c("#/settings")).toBe("settings?tab=general");
+    expect(c("#/general")).toBe("settings?tab=general");
+    expect(c("#/ssh")).toBe("settings?tab=admin");
+    expect(c("#/system/admin")).toBe("settings?tab=admin");
+    expect(c("#/backup")).toBe("settings?tab=backup");
+    expect(c("#/system/backup")).toBe("settings?tab=backup");
+    expect(c("#/install")).toBe("settings?tab=install");
+    expect(c("#/network/firewall")).toBe("firewall");
+    expect(c("#/circumvention/zapret")).toBe("zapret");
+  });
+
+  it("preserves explicit tab and extra query params over redirect defaults", () => {
+    expect(c("#/routing-tiers?tab=rules")).toBe("policies?tab=rules");
+    expect(c("#/settings?tab=backup")).toBe("settings?tab=backup");
+    expect(c("#/network/wireless/?ref=overview")).toBe("wireless?ref=overview");
+    expect(c("#/policies?tab=list&x=1")).toBe("policies?tab=list&x=1");
+  });
+
+  it("keeps the wizard special route and falls back unknowns to overview", () => {
+    expect(c("#/wizard")).toBe("wizard");
+    expect(c("#/setup")).toBe("wizard");
+    expect(c("#/some/unknown/path")).toBe("overview");
   });
 });
