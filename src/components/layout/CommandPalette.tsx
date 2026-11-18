@@ -69,7 +69,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ onSelectRoute, i
   const items: CommandItem[] = [
     // Обзор
     { id: "overview", title: t.nav.dashboard, category: t.nav.groupOverview, icon: <Activity className="h-4 w-4" />, keywords: "overview dashboard мониторинг статус bandwidth графики", action: () => onSelectRoute("overview") },
-    { id: "traffic", title: `${t.nav.trafficTopology} + ${t.nav.connectedClients}`, category: t.nav.groupOverview, icon: <Network className="h-4 w-4" />, keywords: "traffic topology карта devices clients устройства топология", action: () => onSelectRoute("clients") },
+    { id: "traffic", title: `${t.nav.trafficTopology} + ${t.nav.connectedClients}`, category: t.nav.groupOverview, icon: <Network className="h-4 w-4" />, keywords: "traffic topology карта devices clients устройства", action: () => onSelectRoute("clients") },
     { id: "bandwidth", title: t.nav.realtimeGraphs, category: t.nav.groupOverview, icon: <Activity className="h-4 w-4" />, keywords: "bandwidth graphs скорость трафик", action: () => onSelectRoute("overview") },
     // Трафик и обход
     { id: "routing-tiers", title: `${t.nav.tierEngine} (L1·L2·L3)`, category: t.nav.groupTrafficBypass, icon: <Sliders className="h-4 w-4" />, keywords: "tiers уровни маршрутизации engine keen l1 l2 l3", action: () => onSelectRoute("policies?tab=tiers") },
@@ -102,12 +102,23 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ onSelectRoute, i
     { id: "wizard", title: `${t.nav.setupWizard} (First-Run Wizard)`, category: t.nav.system, icon: <Wand2 className="h-4 w-4" />, keywords: "wizard master настройка", action: () => useWizardStore.getState().openWizard() },
   ];
 
-  const filtered = items.filter(
-    (item) =>
-      item.title.toLowerCase().includes(query.toLowerCase()) ||
-      item.category.toLowerCase().includes(query.toLowerCase()) ||
-      (item.keywords || "").toLowerCase().includes(query.toLowerCase())
-  );
+  const q = query.toLowerCase();
+  const scored = items
+    .map((item) => {
+      const title = item.title.toLowerCase();
+      let score = -1;
+      const idx = title.indexOf(q);
+      if (idx >= 0) {
+        const before = idx === 0 || /[\s(]/.test(title[idx - 1]);
+        const after = idx + q.length === title.length || /[\s),:]/.test(title[idx + q.length]);
+        score = title.startsWith(q) ? 0 : before && after ? 0.5 : 1;
+      } else if ((item.keywords || "").includes(q)) score = 2;
+      else if (item.category.toLowerCase().includes(q)) score = 3;
+      return { item, score };
+    })
+    .filter((entry) => entry.score >= 0)
+    .sort((a, b) => a.score - b.score);
+  const filtered = scored.map((entry) => entry.item);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
