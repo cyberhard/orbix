@@ -167,11 +167,8 @@ export interface CompiledSystemConfig {
     general: string[];
     exclude: string[];
   };
-  dnsmasqEntries: Array<{
-    domain: string;
-    targetIp?: string;
-    server?: string;
-  }>;
+  /** raw dnsmasq option lines, e.g. "server=/vk.com/77.88.8.8" */
+  dnsmasqEntries: string[];
   firewallRules?: any[];
   blockedDomains?: string[];
   directDomains?: string[];

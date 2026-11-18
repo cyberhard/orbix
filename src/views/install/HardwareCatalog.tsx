@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -11,24 +11,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import {
-  Router,
-  Search,
-  Download,
-  CheckCircle2,
-  AlertTriangle,
-  HelpCircle,
-  ExternalLink,
-  ShieldCheck,
-  FileCode,
-  Terminal,
-  Cpu,
-  Radio,
-  Sparkles,
-  BookOpen,
-  ArrowRight,
-  LifeBuoy,
-} from "lucide-react";
+import { Router, Search, Download, Terminal, BookOpen, LifeBuoy, Sparkles} from "lucide-react";
 import { useI18nStore } from "@/store/i18n-store";
 import { usePolicyStore } from "@/store/policy-store";
 

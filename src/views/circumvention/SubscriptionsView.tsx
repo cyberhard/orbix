@@ -36,26 +36,7 @@ import {
 import { formatBytes } from "@/lib/utils";
 
 export const SubscriptionsView: React.FC = () => {
-  const {
-    url,
-    apiKey,
-    metadata,
-    nodes,
-    activeNodeId,
-    isSyncing,
-    isTestingLatency,
-    error,
-    setUrl,
-    setApiKey,
-    syncSubscription,
-    setActiveNode,
-    setSelectionMode,
-    setAutoUpdateInterval,
-    testAllLatencies,
-    deleteNode,
-    deleteSubscription,
-    hydrateFromRouterCache,
-  } = useSubscriptionStore();
+  const {url, apiKey, metadata, nodes, activeNodeId, isSyncing, isTestingLatency, error, syncSubscription, setActiveNode, setSelectionMode, setAutoUpdateInterval, testAllLatencies, deleteSubscription, hydrateFromRouterCache} = useSubscriptionStore();
 
   const { language } = useI18nStore();
   const isRu = language === "ru";
@@ -102,17 +83,9 @@ export const SubscriptionsView: React.FC = () => {
     }
   };
 
-  const handleDeleteNode = (id: string, name: string) => {
-    deleteNode(id);
-    showFeedbackToast(isRu ? `Узел "${name}" удален.` : `Node "${name}" removed.`);
-  };
+  
 
-  const handleSelectNode = async (id: string, name: string) => {
-    const ok = await setActiveNode(id);
-    if (ok) {
-      showFeedbackToast(isRu ? `Активный сервер переключен на "${name}"` : `Active node switched to "${name}"`);
-    }
-  };
+  
 
   // Quota calculation
   const usedBytes = (metadata.uploadBytes || 0) + (metadata.downloadBytes || 0);

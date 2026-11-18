@@ -236,7 +236,7 @@ export class BackupCrypto {
         const key = await subtle.deriveKey(
           {
             name: "PBKDF2",
-            salt: saltBytes,
+            salt: saltBytes as BufferSource,
             iterations: 100000,
             hash: "SHA-256",
           },
@@ -250,7 +250,7 @@ export class BackupCrypto {
         const ciphertextBuffer = await subtle.encrypt(
           {
             name: "AES-GCM",
-            iv: ivBytes,
+            iv: ivBytes as BufferSource,
           },
           key,
           enc.encode(plainTextJson)
@@ -329,7 +329,7 @@ export class BackupCrypto {
         const key = await subtle.deriveKey(
           {
             name: "PBKDF2",
-            salt: saltBuffer,
+            salt: saltBuffer as BufferSource,
             iterations: 100000,
             hash: "SHA-256",
           },
@@ -345,10 +345,10 @@ export class BackupCrypto {
         const decryptedBuffer = await subtle.decrypt(
           {
             name: "AES-GCM",
-            iv: ivBuffer,
+            iv: ivBuffer as BufferSource,
           },
           key,
-          ciphertextBytes
+          ciphertextBytes as BufferSource
         );
 
         return new TextDecoder().decode(decryptedBuffer);

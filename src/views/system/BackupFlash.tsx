@@ -18,34 +18,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import {
-  Save,
-  Upload,
-  RotateCcw,
-  AlertTriangle,
-  Loader2,
-  CheckCircle2,
-  Download,
-  Shield,
-  Lock,
-  Unlock,
-  FileCode,
-  ArrowRight,
-  RefreshCw,
-  Info,
-  Server,
-  Layers,
-  Sparkles,
-  Eye,
-  EyeOff,
-  Copy,
-  Check,
-  Terminal,
-  Hash,
-  SlidersHorizontal,
-  ChevronDown,
-  ChevronUp,
-} from "lucide-react";
+import { Save, Upload, RotateCcw, AlertTriangle, Loader2, CheckCircle2, Download, Shield, Lock, FileCode, Server, Layers, Sparkles, Eye, EyeOff, Copy, Check, Terminal, Hash, SlidersHorizontal, ChevronDown, ChevronUp } from "lucide-react";
 import { ubusClient } from "@/lib/ubus-client";
 import { useI18nStore } from "@/store/i18n-store";
 import { usePolicyStore } from "@/store/policy-store";
@@ -67,7 +40,6 @@ export const BackupFlash: React.FC = () => {
   const [includeSecrets, setIncludeSecrets] = useState(false);
   const [encryptBackup, setEncryptBackup] = useState(false);
   const [exportPassword, setExportPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [previewPackage, setPreviewPackage] = useState<PanelExportPackage | null>(null);
 
   // Simple Mode password
@@ -102,7 +74,7 @@ export const BackupFlash: React.FC = () => {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [importPreview, setImportPreview] = useState<ImportPreviewResult | null>(null);
   const [importMode, setImportMode] = useState<ImportMode>("merge");
-  const [selectedImportSections, setSelectedImportSections] = useState<string[]>([
+  const [selectedImportSections] = useState<string[]>([
     "general",
     "network",
     "devices",

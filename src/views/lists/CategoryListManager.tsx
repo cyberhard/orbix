@@ -6,44 +6,18 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  Layers,
-  Plus,
-  RefreshCw,
-  Search,
-  Trash2,
-  Edit2,
-  Check,
-  CheckCircle2,
-  Globe,
-  Video,
-  Building2,
-  MessageSquare,
-  Sparkles,
-  Gamepad2,
-  ShieldAlert,
-  Download,
-  Upload,
-} from "lucide-react";
+
+import { Layers, Plus, Search, Trash2, CheckCircle2, Globe, Video, Building2, MessageSquare, Sparkles, Gamepad2, ShieldAlert } from "lucide-react";
 import { DomainCategory } from "@/services/policy-engine/types";
 
 export const CategoryListManager: React.FC = () => {
   const { language } = useI18nStore();
   const isRu = language === "ru";
-  const { categories, addCategory, updateCategory, deleteCategory } = usePolicyStore();
+  const {categories, updateCategory} = usePolicyStore();
 
   const [search, setSearch] = useState("");
   const [selectedCat, setSelectedCat] = useState<DomainCategory | null>(categories[0] || null);
   const [newDomainInput, setNewDomainInput] = useState("");
-  const [isUpdating, setIsUpdating] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -80,7 +54,7 @@ export const CategoryListManager: React.FC = () => {
     });
     setSelectedCat({ ...selectedCat, domains: updatedDomains, itemCount: updatedDomains.length });
     setNewDomainInput("");
-    showToast(isRu ? `Домен ${d} добавлен!` : `Domain ${d} added!`);
+    showToast(isRu ? `Домен ${d} добавлен в список (вступит после «Применить политики»)` : `Domain ${d} added to the list (takes effect after policies are applied)`);
   };
 
   const handleRemoveDomain = (domainToRemove: string) => {
@@ -92,13 +66,6 @@ export const CategoryListManager: React.FC = () => {
     });
     setSelectedCat({ ...selectedCat, domains: updatedDomains, itemCount: updatedDomains.length });
     showToast(isRu ? `Домен ${domainToRemove} удален` : `Domain ${domainToRemove} removed`);
-  };
-
-  const handleUpdateAllLists = async () => {
-    setIsUpdating(true);
-    await new Promise((r) => setTimeout(r, 650));
-    setIsUpdating(false);
-    showToast(isRu ? "Списки доменов успешно синхронизированы!" : "All category domain feeds updated!");
   };
 
   const filteredCategories = categories.filter(
@@ -125,15 +92,11 @@ export const CategoryListManager: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            onClick={handleUpdateAllLists}
-            disabled={isUpdating}
-            className="text-xs h-8 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 gap-1.5"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${isUpdating ? "animate-spin" : ""}`} />
-            {isRu ? "Обновить фиды" : "Update Feeds"}
-          </Button>
+          <span className="text-[10px] text-zinc-500 max-w-[240px] text-right">
+            {isRu
+              ? "Категории — локальные списки для политик; изменения применяются кнопкой «Применить» на странице политик."
+              : "Categories are local lists for policies; changes apply via the Apply button on the policies page."}
+          </span>
         </div>
       </div>
 

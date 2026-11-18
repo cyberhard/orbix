@@ -1,35 +1,5 @@
 import React from "react";
-import {
-  Activity,
-  LineChart,
-  Users,
-  Terminal,
-  Shield,
-  Sliders,
-  Layers,
-  Network,
-  Radio,
-  FileCode2,
-  Cpu,
-  Key,
-  Package,
-  RotateCw,
-  Calendar,
-  Save,
-  Router,
-  ChevronRight,
-  Globe,
-  X,
-  Workflow,
-  HelpCircle,
-  Sparkles,
-  SlidersHorizontal,
-  BookmarkCheck,
-  Server,
-  Download,
-  Wand2,
-  ShieldAlert,
-} from "lucide-react";
+import { Activity, LineChart, Users, Terminal, Shield, Sliders, Layers, Network, Radio, FileCode2, Cpu, Key, Package, RotateCw, Calendar, Save, Router, ChevronRight, Globe, X, Workflow, HelpCircle, Sparkles, SlidersHorizontal, BookmarkCheck, Server, Download, Wand2, Baby } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18nStore } from "@/store/i18n-store";
 import { usePolicyStore } from "@/store/policy-store";
@@ -61,6 +31,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, onSelectRoute, i
         {
           title: lang === "ru" ? "Управление сетью" : "Network Control",
           items: [
+            { id: "kid", label: lang === "ru" ? "Пульт для детей" : "Kids remote", icon: <Baby className="h-4 w-4" />, badge: "NEW" },
             { id: "overview", label: t.nav.overview, icon: <Activity className="h-4 w-4" /> },
             {
               id: "policies",
@@ -106,6 +77,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, onSelectRoute, i
         {
           title: t.nav.statusMonitoring,
           items: [
+            { id: "kid", label: lang === "ru" ? "Пульт для детей" : "Kids remote", icon: <Baby className="h-4 w-4" /> },
             { id: "overview", label: t.nav.overview, icon: <Activity className="h-4 w-4" /> },
             {
               id: "traffic",
@@ -146,6 +118,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, onSelectRoute, i
               badge: "Smart",
             },
             { id: "pbr", label: t.nav.policyRouting, icon: <Network className="h-4 w-4" />, badge: "PBR" },
+            { id: "routing-tiers", label: t.nav.tierEngine, icon: <Network className="h-4 w-4" />, badge: "L1·L2·L3" },
             { id: "zapret", label: t.nav.zapretBuilder, icon: <Sliders className="h-4 w-4" /> },
             { id: "podkop", label: t.nav.podkopServices, icon: <Layers className="h-4 w-4" /> },
           ],

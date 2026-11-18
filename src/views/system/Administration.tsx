@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Key, ShieldCheck, Plus, Save, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Key, ShieldCheck, Save, Loader2 } from "lucide-react";
 import { ubusClient } from "@/lib/ubus-client";
 import { useI18nStore } from "@/store/i18n-store";
 

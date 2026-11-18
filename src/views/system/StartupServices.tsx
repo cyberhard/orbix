@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { RotateCw, Play, Square, RefreshCw, Search, CheckCircle2, XCircle, Power, Loader2 } from "lucide-react";
+import { Play, Square, RefreshCw, Search, Power, Loader2 } from "lucide-react";
 import { ubusClient } from "@/lib/ubus-client";
 import { useI18nStore } from "@/store/i18n-store";
+import { WatchdogCard } from "./WatchdogCard";
 
 interface ServiceInfo {
   name: string;
@@ -145,6 +146,8 @@ export const StartupServices: React.FC = () => {
           </button>
         </div>
       )}
+
+      <WatchdogCard />
 
       <Card>
         <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b">

@@ -51,6 +51,8 @@ interface SubscriptionState {
   // Actions
   setUrl: (url: string) => void;
   setApiKey: (key: string) => void;
+  setOutboundGroups: (groups: VpnOutboundGroup[]) => void;
+  setKillSwitch: (cfg: KillSwitchConfig) => void;
   syncSubscription: (overrideUrl?: string, overrideKey?: string) => Promise<boolean>;
   setActiveNode: (nodeId: string) => Promise<boolean>;
   setSelectionMode: (mode: "manual" | "auto_best") => Promise<void>;
@@ -89,7 +91,9 @@ export const useSubscriptionStore = create<SubscriptionState>()(
       rateLimitUntil: null,
 
       setUrl: (url: string) => set({ url }),
-      setApiKey: (apiKey: string) => set({ apiKey }),
+      setApiKey: (key: string) => set({ apiKey: key }),
+      setOutboundGroups: (groups: VpnOutboundGroup[]) => set({ outboundGroups: groups }),
+      setKillSwitch: (cfg: KillSwitchConfig) => set({ killSwitch: cfg }),
 
       syncSubscription: async (overrideUrl?: string, overrideKey?: string) => {
         const url = (overrideUrl !== undefined ? overrideUrl : get().url).trim();
@@ -165,7 +169,7 @@ export const useSubscriptionStore = create<SubscriptionState>()(
                 shortId: shortId,
                 transport: transport,
                 flow: flow,
-                latency: s.latency || Math.floor(25 + Math.random() * 35),
+                latency: s.latency || 0,
                 active: idx === 0,
                 country: s.country || "",
               };
@@ -199,7 +203,7 @@ export const useSubscriptionStore = create<SubscriptionState>()(
                       shortId: params.get("sid") || "",
                       transport: (params.get("type") || "tcp") as any,
                       flow: params.get("flow") || "",
-                      latency: Math.floor(25 + Math.random() * 35),
+                      latency: 0,
                       active: idx === 0,
                     };
                   } catch {
@@ -298,6 +302,15 @@ export const useSubscriptionStore = create<SubscriptionState>()(
             } catch (err) {
               console.warn("[SubscriptionStore] Failed to persist subscription to router cache:", err);
             }
+
+          // Persist subscription URL on router so the panel can re-fetch without this browser
+          if (url) {
+            try {
+              await ubusClient.call("circumvention", "sub_set_source", { url, api_key: apiKey });
+            } catch (err) {
+              console.warn("[SubscriptionStore] Failed to persist subscription source on router:", err);
+            }
+          }
           }
 
           // Automatically set outbound on router for active node
@@ -459,37 +472,44 @@ export const useSubscriptionStore = create<SubscriptionState>()(
             scope: currentScope,
             allow_lan: true,
           });
-        } catch (err) {
+        } catch (err: any) {
+          // Router rejected/failed the change: do NOT flip local state, surface the error
           console.error("[SubscriptionStore] Failed to sync kill switch to router:", err);
+          set({ error: "Kill switch NOT applied on router: " + (err?.message || String(err)) });
+          return false;
         }
 
         set((state) => ({
           killSwitch: { ...state.killSwitch, enabled: nextEnabled },
+          error: null,
         }));
         return true;
       },
 
       setKillSwitchScope: async (scope) => {
-        set((state) => ({
-          killSwitch: { ...state.killSwitch, scope },
-        }));
-
-        if (get().killSwitch.enabled) {
+        const wasEnabled = get().killSwitch.enabled;
+        if (wasEnabled) {
           try {
             await ubusClient.call("circumvention", "killswitch_set", {
               enabled: true,
               scope,
               allow_lan: true,
             });
-          } catch (err) {
+          } catch (err: any) {
             console.error("[SubscriptionStore] Failed to update kill switch scope on router:", err);
+            set({ error: "Kill-switch scope NOT applied on router: " + (err?.message || String(err)) });
+            return;
           }
         }
+        set((state) => ({
+          killSwitch: { ...state.killSwitch, scope },
+          error: null,
+        }));
       },
 
       hydrateFromRouterCache: async () => {
         try {
-          const res = await ubusClient.call("circumvention", "sub_get_cache");
+          const res = await ubusClient.call<any>("circumvention", "sub_get_cache");
           if (res) {
             let data: any = null;
             if (res.nodes && Array.isArray(res.nodes)) {

@@ -1,7 +1,7 @@
 // Cross-Device Configuration Migration & Hardware Adaptation Engine
 // Automatically adapts portable configurations to target OpenWrt router hardware.
 
-import { PanelConfiguration, NetworkInterfaceConfig } from "./schema";
+import { PanelConfiguration } from "./schema";
 import { SystemBoard, NetworkInterfaceStatus, WirelessDevice } from "@/types/ubus";
 
 export interface MigrationItem {
@@ -123,7 +123,8 @@ export class ConfigMigrator {
     // 3. Wireless Radios Mapping
     if (importedConfig.network?.wireless?.radios) {
       const currentRadioKeys = Object.keys(currentRadios || {});
-      const has5g = currentRadioKeys.some((r) => currentRadios[r]?.frequency?.startsWith("5") || currentRadios[r]?.channel > 14);
+      const is5gRadio = (d: any) => typeof d?.frequency === "string" ? d.frequency.startsWith("5") : ((d?.frequency ?? 0) >= 4900 && (d?.frequency ?? 0) < 5925) || (d?.channel ?? 0) > 14;
+      const has5g = currentRadioKeys.some((r) => is5gRadio(currentRadios[r]));
 
       for (const importedRadio of importedConfig.network.wireless.radios) {
         if (importedRadio.band === "5ghz" && !has5g && currentRadioKeys.length > 0) {

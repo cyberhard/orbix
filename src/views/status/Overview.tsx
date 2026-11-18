@@ -18,36 +18,7 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import {
-  Cpu,
-  HardDrive,
-  Activity,
-  Shield,
-  Globe,
-  Radio,
-  Server,
-  Zap,
-  Network,
-  Users,
-  LineChart,
-  Wifi,
-  Copy,
-  Check,
-  Eye,
-  EyeOff,
-  QrCode,
-  Settings2,
-  RefreshCw,
-  Play,
-  CheckCircle2,
-  AlertCircle,
-  Terminal,
-  ChevronDown,
-  ChevronUp,
-  Sparkles,
-  SlidersHorizontal,
-  ArrowDownUp,
-} from "lucide-react";
+import { Cpu, HardDrive, Activity, Shield, Globe, Radio, Server, Zap, Network, Users, LineChart, Wifi, Copy, Check, Eye, EyeOff, QrCode, Settings2, RefreshCw, CheckCircle2, AlertCircle, Terminal, ChevronDown, ChevronUp, Sparkles, ArrowDownUp } from "lucide-react";
 import { formatBytes, formatUptime, pluralizeRu, pluralizeEn } from "@/lib/utils";
 import { DeviceRoutingTable } from "@/components/pbr/DeviceRoutingTable";
 import { BandwidthGraph } from "./BandwidthGraph";
@@ -64,7 +35,7 @@ export const Overview: React.FC = () => {
   const { theme } = useThemeStore();
   const isDark = theme === "dark";
 
-  const { operatingMode, setOperatingMode } = usePolicyStore();
+  const {operatingMode} = usePolicyStore();
   const isSimple = operatingMode === "simple";
 
   const [activeTab, setActiveTab] = useState("overview");
@@ -237,8 +208,8 @@ export const Overview: React.FC = () => {
     ? pluralizeRu(clientCount, "устройство", "устройства", "устройств")
     : pluralizeEn(clientCount, "device", "devices");
 
-  // WiFi radios derived
-  const wifiRadios = Object.entries(wireless || {}).map(([name, data]) => ({ name, ...data }));
+  // Wi-Fi Real Credentials & QR Code payload
+  const wifiRadios = Object.entries(wireless || {}).map(([name, data]) => ({ ...data, name }));
   const radio5G = wifiRadios.find((r) => r.band === "5g" || r.name?.includes("1") || (r as any).config?.band === "5g");
   const radio24G = wifiRadios.find((r) => r.band === "2g" || r.name?.includes("0") || (r as any).config?.band === "2g");
   const primaryIface = radio5G?.interfaces?.[0] || radio24G?.interfaces?.[0] || wifiRadios[0]?.interfaces?.[0];
@@ -1096,12 +1067,14 @@ export const Overview: React.FC = () => {
                 <div className="flex justify-between py-1 border-b border-border/40">
                   <span className="text-muted-foreground">{t.overview.tcpStrategy}</span>
                   <span className="font-mono text-foreground truncate max-w-[170px]" title={zapret?.profiles?.[0]?.methods?.join(" + ")}>
-                    {zapret?.profiles?.[0]?.methods?.join(" + ") || "fake + disorder (ALT11)"}
+                    {zapret?.profiles?.[0]?.methods?.join(" + ") || "—"}
                   </span>
                 </div>
                 <div className="flex justify-between py-1">
                   <span className="text-muted-foreground">{t.overview.udpStrategy}</span>
-                  <span className="font-mono text-foreground">fake + ipfrag2</span>
+                  <span className="font-mono text-foreground truncate max-w-[170px]">
+                    {zapret?.profiles?.find((p: any) => p.id === "zapret-udp")?.methods?.join(" + ") || "—"}
+                  </span>
                 </div>
               </CardContent>
             </Card>
@@ -1237,7 +1210,7 @@ export const Overview: React.FC = () => {
                     </TableHeader>
                     <TableBody>
                       {allInterfaces.map((iface) => {
-                        const stats = iface.data?.statistics || {};
+                        const stats: Record<string, number | undefined> = iface.data?.statistics || {};
                         const rx = stats.rx_bytes || 0;
                         const tx = stats.tx_bytes || 0;
                         const rxPackets = stats.rx_packets || 0;
@@ -1245,7 +1218,7 @@ export const Overview: React.FC = () => {
                         const rxDropped = stats.rx_dropped || 0;
                         const txDropped = stats.tx_dropped || 0;
                         const rxErrors = stats.rx_errors || 0;
-                        const mtu = iface.data?.mtu || (iface.interface === "awg0" ? 1360 : iface.interface.includes("tun") ? 1420 : 1500);
+                        const mtu = (iface.data as { mtu?: number } | undefined)?.mtu || (iface.interface === "awg0" ? 1360 : iface.interface.includes("tun") ? 1420 : 1500);
 
                         const ip =
                           iface["ipv4-address"]?.[0]?.address ||

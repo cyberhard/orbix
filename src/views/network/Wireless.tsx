@@ -4,10 +4,11 @@ import { ubusClient } from "@/lib/ubus-client";
 import { useI18nStore } from "@/store/i18n-store";
 import { usePolicyStore } from "@/store/policy-store";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { QRCodeSVG } from "qrcode.react";
 import {
@@ -25,29 +26,7 @@ import {
   TableRow,
   TableCell,
 } from "@/components/ui/table";
-import {
-  Radio,
-  Wifi,
-  Scan,
-  Shield,
-  Save,
-  CheckCircle2,
-  AlertCircle,
-  Eye,
-  EyeOff,
-  RefreshCw,
-  Signal,
-  Sparkles,
-  Users,
-  Copy,
-  Check,
-  QrCode,
-  SlidersHorizontal,
-  Radar,
-  Lock,
-  Cpu,
-  Layers,
-} from "lucide-react";
+import { Radio, Wifi, Scan, Shield, Save, CheckCircle2, AlertCircle, Eye, EyeOff, RefreshCw, Signal, Sparkles, Users, QrCode, SlidersHorizontal, Radar } from "lucide-react";
 
 export const Wireless: React.FC = () => {
   const { lang } = useI18nStore();
@@ -56,7 +35,7 @@ export const Wireless: React.FC = () => {
   const { operatingMode } = usePolicyStore();
   const isExpert = operatingMode === "expert";
 
-  const { data: wifiMap, refetch, isLoading } = useQuery({
+  const {data: wifiMap, refetch} = useQuery({
     queryKey: ["wireless-devices"],
     queryFn: () => ubusClient.getWirelessDevices(),
     refetchInterval: 5000,

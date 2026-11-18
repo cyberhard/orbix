@@ -4,8 +4,8 @@ import { persist } from "zustand/middleware";
 import { HardwareDetector, HardwareDetectionResult } from "./hardware-detector";
 import { ubusClient } from "@/lib/ubus-client";
 import { usePolicyStore } from "@/store/policy-store";
-import { useThemeStore } from "@/store/theme-store";
-import { useI18nStore } from "@/store/i18n-store";
+import "@/store/theme-store";
+import "@/store/i18n-store";
 
 export type WizardStep =
   | "welcome"
@@ -219,7 +219,7 @@ export const useWizardStore = create<WizardState>()(
           // 6. Apply Core Policies
           set({ applyProgress: "Компиляция политик маршрутизации и обхода..." });
           const policyStore = usePolicyStore.getState();
-          policyStore.setOperatingMode(draft.setupMode);
+          policyStore.setOperatingMode(draft.setupMode === "advanced" ? "expert" : "simple");
 
           // Update YouTube Zapret policy toggle
           const ytPol = policyStore.policies.find((p) => p.id === "sys-policy-youtube-zapret");

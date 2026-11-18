@@ -46,6 +46,33 @@ export const PodkopView: React.FC = () => {
   const [newDomain, setNewDomain] = useState("");
   const [newSubnet, setNewSubnet] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSaveRules = async () => {
+    setIsSaving(true);
+    try {
+      await ubusClient.setUci("podkop", "main", {
+        enabled: config.enabled ? "1" : "0",
+        mode: config.mode,
+        outbound_interface: config.outbound_interface,
+      });
+      await ubusClient.commitUci("podkop");
+      const res = await ubusClient.podkopUpdate();
+      if (res.status === "ok") {
+        alert(
+          lang === "ru"
+            ? "Основные настройки Podkop сохранены в UCI и служба перезапущена.\nСписки сервисов и пользовательские адреса НЕ записаны — панель не знает их UCI-схему (раздел черновика)."
+            : "Core Podkop settings saved to UCI and the service reloaded.\nService toggles and custom addresses were NOT written — the panel does not know their UCI schema (draft section)."
+        );
+      } else {
+        alert(lang === "ru" ? `СОХРАНЕНО, НО ПЕРЕЗАПУСК УПАЛ: ${res.message}` : `SAVED, BUT RELOAD FAILED: ${res.message}`);
+      }
+    } catch (e: any) {
+      alert(lang === "ru" ? `ОШИБКА СОХРАНЕНИЯ: ${e?.message || String(e)}` : `SAVE ERROR: ${e?.message || String(e)}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const toggleService = (svc: keyof typeof config.services) => {
     setConfig((prev) => ({
@@ -91,9 +118,22 @@ export const PodkopView: React.FC = () => {
 
   const handleUpdateLists = async () => {
     setIsUpdating(true);
-    await new Promise((r) => setTimeout(r, 1200));
-    setIsUpdating(false);
-    alert(lang === "ru" ? "Списки сервисов Podkop успешно обновлены из репозитория GitHub!" : "Podkop service domain sets successfully refreshed from GitHub community feeds!");
+    try {
+      const res = await ubusClient.podkopUpdate();
+      if (res.status === "ok") {
+        alert(
+          lang === "ru"
+            ? "Podkop перезапущен на роутере.\n" + (res.output || "(нет вывода)")
+            : "Podkop reloaded on the router.\n" + (res.output || "(no output)")
+        );
+      } else {
+        alert(lang === "ru" ? `ОШИБКА: ${res.message || "podkop reload failed"}` : `ERROR: ${res.message || "podkop reload failed"}`);
+      }
+    } catch (e: any) {
+      alert(lang === "ru" ? `ОШИБКА: ${e?.message || String(e)}` : `ERROR: ${e?.message || String(e)}`);
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   return (
@@ -115,10 +155,23 @@ export const PodkopView: React.FC = () => {
             <RefreshCw className={`h-3.5 w-3.5 ${isUpdating ? "animate-spin" : ""}`} />
             {isUpdating ? t.podkop.syncing : t.podkop.updateFeeds}
           </Button>
-          <Button variant="default" size="sm" className="text-xs bg-emerald-600 hover:bg-emerald-500 h-8">
-            {t.podkop.saveRules}
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleSaveRules}
+            disabled={isSaving}
+            className="text-xs bg-emerald-600 hover:bg-emerald-500 h-8"
+          >
+            {isSaving ? (lang === "ru" ? "Сохранение..." : "Saving...") : t.podkop.saveRules}
           </Button>
         </div>
+      </div>
+
+      {/* Honest scope banner: only core settings have a verified write path */}
+      <div className="p-3 rounded-lg border border-amber-800/50 bg-amber-950/20 text-amber-300/90 text-[11px]">
+        {lang === "ru"
+          ? "«Сохранить» записывает в UCI только режим, интерфейс выхода и включение Podkop. Переключатели сервисов и пользовательские домены/подсети — черновик: их схема UCI панелью не проверялась и на роутер не попадает."
+          : "\"Save\" writes only mode, outbound interface and the enable flag to UCI. Service toggles and custom domains/subnets are a draft: their UCI schema was never verified, so they never reach the router."}
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">

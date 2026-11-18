@@ -1,59 +1,16 @@
-import React, { useEffect, useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
+import React, { useState } from "react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Sparkles,
-  Router,
-  Cpu,
-  Wifi,
-  Shield,
-  Layers,
-  ArrowRight,
-  ArrowLeft,
-  CheckCircle2,
-  AlertTriangle,
-  Loader2,
-  Lock,
-  Eye,
-  EyeOff,
-  Radio,
-  Server,
-  Globe,
-  Check,
-  RefreshCw,
-  Terminal,
-} from "lucide-react";
+
+import { Sparkles, Router, Wifi, Shield, Layers, ArrowRight, ArrowLeft, CheckCircle2, AlertTriangle, Loader2, Eye, EyeOff, Globe, Check } from "lucide-react";
 import { useWizardStore, WizardStep } from "@/services/wizard/wizard-store";
 import { useI18nStore } from "@/store/i18n-store";
 
 export const SetupWizardModal: React.FC = () => {
-  const {
-    isOpen,
-    isCompleted,
-    currentStep,
-    hardware,
-    isLoadingHardware,
-    draft,
-    isApplying,
-    applyProgress,
-    error,
-    setStep,
-    setSetupMode,
-    updateDraft,
-    loadHardware,
-    applyWizard,
-    closeWizard,
-  } = useWizardStore();
+  const {isOpen, currentStep, hardware, isLoadingHardware, draft, isApplying, applyProgress, error, setStep, setSetupMode, updateDraft, applyWizard, closeWizard} = useWizardStore();
 
   const { lang } = useI18nStore();
   const isRu = lang === "ru";
@@ -174,9 +131,9 @@ export const SetupWizardModal: React.FC = () => {
 
                 {/* Advanced Mode Option */}
                 <div
-                  onClick={() => setSetupMode("expert")}
+                  onClick={() => setSetupMode("advanced")}
                   className={`cursor-pointer p-4 rounded-xl border transition-all ${
-                    draft.setupMode === "expert"
+                    draft.setupMode === "advanced"
                       ? "border-amber-500 bg-amber-950/20 shadow-lg shadow-amber-950/40"
                       : "border-zinc-800 bg-zinc-900/40 hover:border-zinc-700"
                   }`}

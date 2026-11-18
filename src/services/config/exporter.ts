@@ -1,22 +1,7 @@
 // Configuration Exporter for ORBIX
 // Extracts all managed router settings into portable, versioned JSON.
 
-import {
-  CURRENT_SCHEMA_VERSION,
-  PANEL_FORMAT_IDENTIFIER,
-  PanelExportPackage,
-  PanelConfiguration,
-  GeneralConfigSection,
-  NetworkConfigSection,
-  DevicesConfigSection,
-  PoliciesConfigSection,
-  VpnConfigSection,
-  DnsConfigSection,
-  ZapretConfigSection,
-  FirewallConfigSection,
-  ListsConfigSection,
-  DiagnosticsConfigSection,
-} from "./schema";
+import { CURRENT_SCHEMA_VERSION, PANEL_FORMAT_IDENTIFIER, PanelExportPackage, PanelConfiguration, GeneralConfigSection, NetworkConfigSection, VpnConfigSection } from "./schema";
 import { BackupCrypto } from "./crypto";
 import { ubusClient } from "@/lib/ubus-client";
 import { usePolicyStore } from "@/store/policy-store";
@@ -50,7 +35,7 @@ export class ConfigExporter {
     ];
 
     // 1. Fetch live system board and info
-    const [board, sysInfo, sysUci, netUci, dhcpUci, dropbearUci, fwUci] = await Promise.all([
+    const [board, , sysUci, netUci, dhcpUci, , fwUci] = await Promise.all([
       ubusClient.getBoard().catch(() => null),
       ubusClient.getSystemInfo().catch(() => null),
       ubusClient.getUci<Record<string, any>>("system").catch(() => null),

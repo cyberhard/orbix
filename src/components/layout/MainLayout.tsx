@@ -22,6 +22,7 @@ import { DnsRoutingCenter } from "@/views/dns/DnsRoutingCenter";
 import { VpnManager } from "@/views/circumvention/VpnManager";
 import { SubscriptionsView } from "@/views/circumvention/SubscriptionsView";
 import { ZapretStrategyBuilder } from "@/views/circumvention/ZapretStrategyBuilder";
+import { RoutingEngineView } from "@/views/circumvention/RoutingEngineView";
 import { PodkopView } from "@/views/circumvention/PodkopView";
 import { PbrView } from "@/views/circumvention/PbrView";
 import { Interfaces } from "@/views/network/Interfaces";
@@ -36,6 +37,7 @@ import { StartupServices } from "@/views/system/StartupServices";
 import { ScheduledTasks } from "@/views/system/ScheduledTasks";
 import { BackupFlash } from "@/views/system/BackupFlash";
 import { HardwareCatalog } from "@/views/install/HardwareCatalog";
+import { KidView } from "@/views/kid/KidView";
 import { SetupWizardModal } from "@/views/wizard/SetupWizardModal";
 import { useWizardStore } from "@/services/wizard/wizard-store";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -241,6 +243,7 @@ export const MainLayout: React.FC = () => {
       case "tasks": return t.nav.scheduledTasks;
       case "backup": return t.nav.backupFlash;
       case "install": return t.nav.installCatalog;
+      case "kid": return lang === "ru" ? "Пульт для детей" : "Kids remote";
       case "wizard": return t.nav.setupWizard;
       default:
         return t.nav.overview;
@@ -257,6 +260,8 @@ export const MainLayout: React.FC = () => {
         return <ExplainRoute />;
       case "policies":
         return operatingMode === "simple" ? <SimplePolicyManager /> : <PolicyEngineView />;
+      case "routing-tiers":
+        return <RoutingEngineView />;
       case "lists":
         return <CategoryListManager />;
       case "dns":
@@ -301,6 +306,8 @@ export const MainLayout: React.FC = () => {
         return <BackupFlash />;
       case "install":
         return <HardwareCatalog />;
+      case "kid":
+        return <KidView />;
       case "wizard":
         return <HardwareCatalog />;
       default:

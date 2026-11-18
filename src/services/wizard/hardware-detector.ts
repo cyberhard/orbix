@@ -73,8 +73,8 @@ export class HardwareDetector {
         ubusClient.getInterfaces().catch(() => [] as NetworkInterfaceStatus[]),
         ubusClient.getWirelessDevices().catch(() => ({} as Record<string, WirelessDevice>)),
         ubusClient.getPackages().catch(() => ({} as Record<string, string>)),
-        ubusClient.getServices().catch(() => ({})),
-        ubusClient.call<Record<string, any>>("network.device", "status").catch(() => ({})),
+        ubusClient.getServices().catch(() => ({}) as Record<string, { start?: number; stop?: number; enabled?: boolean; running?: boolean }>),
+        ubusClient.call<Record<string, any>>("network.device", "status").catch(() => ({}) as Record<string, any>),
       ]);
 
     // 1. Hardware & System
@@ -121,8 +121,9 @@ export class HardwareDetector {
 
     for (const rKey of radioKeys) {
       const dev = wifiMap[rKey];
-      const is5g = dev.frequency?.startsWith("5") || dev.channel > 14;
-      const is6g = dev.frequency?.startsWith("6") || dev.channel > 170;
+      const freq = typeof dev.frequency === "string" ? Number(dev.frequency) : dev.frequency;
+      const is5g = (freq !== undefined && freq >= 4900 && freq < 5925) || (dev.channel ?? 0) > 14;
+      const is6g = (freq !== undefined && freq >= 5925) || (dev.channel ?? 0) > 170;
       const band = is6g ? "6ghz" : is5g ? "5ghz" : "2.4ghz";
 
       const firstIface = dev.interfaces?.[0];

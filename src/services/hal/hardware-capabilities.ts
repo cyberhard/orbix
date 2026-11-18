@@ -31,7 +31,7 @@ export class HardwareCapabilitiesService {
         ubusClient.getWirelessDevices().catch(() => ({} as Record<string, WirelessDevice>)),
         ubusClient.getPackages().catch(() => ({} as Record<string, string>)),
         ubusClient.getServices().catch(() => ({})),
-        ubusClient.call<Record<string, any>>("network.device", "status").catch(() => ({})),
+        ubusClient.call<Record<string, any>>("network.device", "status").catch(() => ({}) as Record<string, any>),
       ]);
 
     // 1. Detect Architecture

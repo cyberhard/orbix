@@ -21,12 +21,14 @@ class KillSwitchManager {
     allowLan: true,
     active: false,
     activeDropRulesCount: 0,
-    protectedDevices: ["192.168.1.130", "192.168.1.195"],
-    tunnelStatus: "up",
+    // No invented device list: only devices actually assigned to VPN in PBR are protected,
+    // the router-side killswitch_status RPC reports the applied state.
+    protectedDevices: [],
+    tunnelStatus: "checking",
     blockedWan: false,
   };
 
-  private pollTimer: NodeJS.Timeout | null = null;
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
     this.startWatchdog();
@@ -35,7 +37,7 @@ class KillSwitchManager {
   public async getRuntimeState(): Promise<KillSwitchRuntimeState> {
     try {
       // Query router killswitch status via dedicated circumvention RPC
-      const statusRes = await ubusClient.call("circumvention", "killswitch_status");
+      const statusRes = await ubusClient.call<any>("circumvention", "killswitch_status");
       if (statusRes) {
         this.runtimeState.enabled = Boolean(statusRes.enabled);
         this.runtimeState.active = Boolean(statusRes.active);
@@ -65,7 +67,7 @@ class KillSwitchManager {
     this.runtimeState.scope = scope;
 
     try {
-      const res = await ubusClient.call("circumvention", "killswitch_set", {
+      const res = await ubusClient.call<any>("circumvention", "killswitch_set", {
         enabled,
         scope,
         allow_lan: true,

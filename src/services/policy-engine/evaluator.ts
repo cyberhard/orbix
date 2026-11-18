@@ -161,7 +161,7 @@ export class RouteEvaluator {
       target.includes("googlevideo") ||
       target.includes("ytimg");
 
-    const isDiscordTarget = target.includes("discord");
+    target.includes("discord");
 
     let selectedAction = winner?.action.type || "default";
     let selectedOutbound = "wan";

@@ -17,24 +17,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import {
-  ZoomIn,
-  ZoomOut,
-  Maximize2,
-  Minimize2,
-  Download,
-  RotateCcw,
-  Laptop,
-  Smartphone,
-  Activity,
-  Shield,
-  ShieldCheck,
-  Zap,
-  Globe,
-  Sparkles,
-  Layers,
-  ArrowRight,
-} from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize2, Minimize2, Download, RotateCcw, Laptop, Smartphone, Activity, ShieldCheck, Zap, Globe } from "lucide-react";
 
 export type NodeType = "router" | "server" | "switch" | "ap" | "host";
 export type NodeStatus = "online" | "warning" | "offline";
@@ -145,8 +128,8 @@ const DEFAULT_POSITIONS: Record<string, { x: number; y: number }> = {
 export const TrafficFlow: React.FC = () => {
   const { lang, language } = useI18nStore();
   const isRu = (lang || language) === "ru";
-  const { theme } = useThemeStore();
-  const isDark = theme === "dark";
+  const {} = useThemeStore();
+  
 
   const svgRef = useRef<SVGSVGElement | null>(null);
   const mapCardRef = useRef<HTMLDivElement | null>(null);
@@ -173,7 +156,7 @@ export const TrafficFlow: React.FC = () => {
 
   // Selection & Search
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchQuery] = useState<string>("");
 
   useEffect(() => {
     const handleFsChange = () => {
@@ -235,7 +218,7 @@ export const TrafficFlow: React.FC = () => {
   const wan = ifaces?.find((i) => i.interface === "wan" || i.l3_device === "wan");
   const lan = ifaces?.find((i) => i.interface === "lan" || i.interface === "br-lan");
 
-  const wifiRadios = Object.entries(wireless || {}).map(([name, data]) => ({ name, ...data }));
+  const wifiRadios = Object.entries(wireless || {}).map(([name, data]) => ({ ...data, name }));
   const radio5G = wifiRadios.find((r) => r.band === "5g" || r.name?.includes("1") || (r as any).config?.band === "5g");
   const radio24G = wifiRadios.find((r) => r.band === "2g" || r.name?.includes("0") || (r as any).config?.band === "2g");
 
@@ -421,16 +404,9 @@ export const TrafficFlow: React.FC = () => {
     // 9. Client Hosts from real DHCP Leases & ARP (included in "all" view mode)
     if (viewMode === "all") {
       const rawLeases: any[] = Array.isArray(leases) ? leases : (leases as any)?.dhcp_leases || [];
-      const realLeases = rawLeases.length > 0 ? rawLeases : [
-        { ipaddr: "192.168.1.130", macaddr: "B2:68:C5:3D:2E:52", hostname: "Redmi-Note-9" },
-        { ipaddr: "192.168.1.176", macaddr: "D8:43:AE:C0:54:5D", hostname: "quasar" },
-        { ipaddr: "192.168.1.159", macaddr: "A2:4C:71:87:06:65", hostname: "Pixel" },
-        { ipaddr: "192.168.1.204", macaddr: "72:D0:AE:36:A2:8C", hostname: "TECNO-POVA-7-Neo" },
-        { ipaddr: "192.168.1.170", macaddr: "DC:97:58:B1:D2:AE", hostname: "TV-pristavka-Xiaomi" },
-        { ipaddr: "192.168.1.249", macaddr: "AE:17:E4:FC:15:F5", hostname: "Redmi-15" },
-      ];
+      const realLeases = rawLeases;
 
-      realLeases.slice(0, 10).forEach((l, idx) => {
+      realLeases.slice(0, 10).forEach((l, _idx) => {
         const ip = l.ipaddr || l.ip || "";
         if (!ip) return;
         const hostId = `host-${ip.replace(/\./g, "-")}`;

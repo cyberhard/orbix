@@ -4,6 +4,196 @@
 
 . /usr/share/libubox/jshn.sh
 
+# ============================================================================
+# panel-kid: child-friendly controls. Real enforcement:
+#  - master / bedtime / per-device pause  -> nft table inet panel (hook forward priority -1,
+#    runs BEFORE fw4, so established streams die immediately, no conntrack tools needed)
+#  - category blocks                      -> dnsmasq address=/domain/# via uci list
+# Helper files self-install on first use (kid_ensure, idempotent).
+# ============================================================================
+KID_VER=7
+
+kid_ensure() {
+	if [ -x /usr/sbin/panel-kid-apply ] && grep -q "panel-kid-version: $KID_VER" /usr/sbin/panel-kid-apply 2>/dev/null; then
+		return 0
+	fi
+	mkdir -p /usr/lib/panel-kid/blocks
+	printf "%s\n" youtube.com youtu.be googlevideo.com ytimg.com > /usr/lib/panel-kid/blocks/youtube.txt
+	printf "%s\n" roblox.com minecraft.net epicgames.com steampowered.com supercell.com > /usr/lib/panel-kid/blocks/games.txt
+	printf "%s\n" vk.com ok.ru tiktok.com instagram.com t.me facebook.com > /usr/lib/panel-kid/blocks/social.txt
+	printf "%s\n" pornhub.com xvideos.com xhamster.com onlyfans.com > /usr/lib/panel-kid/blocks/adult.txt
+	if [ ! -f /etc/config/panel-kid ]; then
+		cat > /etc/config/panel-kid <<'KIDCONF'
+config kid 'main'
+	option master '1'
+	option auto_bedtime '0'
+	option bedtime_start '21:30'
+	option bedtime_end '07:00'
+KIDCONF
+		uci -q commit panel-kid
+	fi
+	cat > /usr/sbin/panel-kid-apply <<'KIDAPPLY'
+#!/bin/sh
+# panel-kid-version: 7
+# Applies /etc/config/panel-kid to kernel + dnsmasq. Idempotent, runs from cron every minute.
+BR="br-lan"
+M=$(uci -q get panel-kid.main.master); [ -z "$M" ] && M=1
+AUTO=$(uci -q get panel-kid.main.auto_bedtime)
+S=$(uci -q get panel-kid.main.bedtime_start)
+E=$(uci -q get panel-kid.main.bedtime_end)
+EFF="$M"
+if [ "$AUTO" = "1" ] && [ -n "$S" ] && [ -n "$E" ]; then
+	H=$(date +%H); MIN=$(date +%M)
+	HM=$((10#$H * 60 + 10#$MIN))
+	SH=${S%%:*}; SM=${S##*:}; EH=${E%%:*}; EM=${E##*:}
+	case "$SH$SM$EH$EM" in
+	''|*[!0-9]*) ;;
+	*)
+		Smin=$((10#$SH * 60 + 10#$SM)); Emin=$((10#$EH * 60 + 10#$EM))
+		if [ "$Smin" -lt "$Emin" ]; then
+			[ "$HM" -ge "$Smin" ] && [ "$HM" -lt "$Emin" ] && EFF=0
+		else
+			if [ "$HM" -ge "$Smin" ] || [ "$HM" -lt "$Emin" ]; then EFF=0; fi
+		fi ;;
+	esac
+fi
+echo "$EFF" > /tmp/panel-kid-effective
+
+PAUSED=""
+for SEC in $(uci -q show panel-kid 2>/dev/null | sed -n 's/^panel-kid\.\([A-Za-z0-9_-]*\)=kiddev$/\1/p'); do
+	P=$(uci -q get "panel-kid.$SEC.paused")
+	PMAC=$(uci -q get "panel-kid.$SEC.mac")
+	[ "$P" = "1" ] || continue
+	[ -n "$PMAC" ] || continue
+	case "$PMAC" in ??:??:??:??:??:??) PAUSED="$PAUSED $(printf "%s" "$PMAC" | tr 'A-F' 'a-f')" ;; esac
+done
+
+if ! nft list table inet panel >/dev/null 2>&1; then
+	nft add table inet panel 2>/dev/null
+fi
+nft flush table inet panel 2>/dev/null
+NEED=0
+[ "$EFF" = "0" ] && NEED=1
+[ -n "$PAUSED" ] && NEED=1
+if [ "$NEED" = "1" ]; then
+	nft add chain inet panel guard "{ type filter hook forward priority -1; policy accept; }" 2>/dev/null
+	if [ "$EFF" = "0" ]; then
+		nft add rule inet panel guard iifname "$BR" counter drop 2>/dev/null
+	else
+		for KMAC in $PAUSED; do
+			nft add rule inet panel guard ether saddr "$KMAC" counter drop 2>/dev/null
+		done
+	fi
+fi
+
+# Preflight: dnsmasq refuses to start on duplicate static-lease IPs; do not hand it a fatal config
+_KIPLIST=""
+_KDUP=0
+for _kh in $(uci -q show dhcp 2>/dev/null | sed -n 's/^dhcp\.\([A-Za-z0-9_-]*\)=host$/\1/p'); do
+	_kip=$(uci -q get "dhcp.$_kh.ip" 2>/dev/null)
+	[ -n "$_kip" ] || continue
+	case " $_KIPLIST " in *" $_kip "*) _KDUP=1 ;; esac
+	_KIPLIST="$_KIPLIST $_kip"
+done
+if [ "$_KDUP" = "1" ]; then
+	logger -t panel-kid "dnsmasq restart skipped: duplicate static lease IPs in dhcp config"
+fi
+
+BEFORE=$(uci -q get "dhcp.@dnsmasq[0].address" 2>/dev/null)
+for F in /usr/lib/panel-kid/blocks/*.txt; do
+	for D in $(cat "$F" 2>/dev/null); do
+		uci -q del_list "dhcp.@dnsmasq[0].address=/$D/#" 2>/dev/null
+	done
+done
+for C in $(uci -q get panel-kid.main.blocks 2>/dev/null); do
+	case "$C" in youtube|games|social|adult) ;; *) continue ;; esac
+	for D in $(cat "/usr/lib/panel-kid/blocks/$C.txt" 2>/dev/null); do
+		uci -q add_list "dhcp.@dnsmasq[0].address=/$D/#" 2>/dev/null
+	done
+done
+AFTER=$(uci -q get "dhcp.@dnsmasq[0].address" 2>/dev/null)
+uci -q commit dhcp
+if [ "$BEFORE" != "$AFTER" ] && [ "$_KDUP" != "1" ]; then
+	/etc/init.d/dnsmasq restart >/dev/null 2>&1
+fi
+exit 0
+KIDAPPLY
+	chmod +x /usr/sbin/panel-kid-apply
+	cat > /etc/init.d/panel-kid <<'KIDINIT'
+#!/bin/sh /etc/rc.common
+# panel-kid-version: 7
+START=98
+boot() { /usr/sbin/panel-kid-apply; }
+start() { /usr/sbin/panel-kid-apply; }
+restart() { /usr/sbin/panel-kid-apply; }
+KIDINIT
+	chmod +x /etc/init.d/panel-kid
+	/etc/init.d/panel-kid enable >/dev/null 2>&1
+	_CRON=$(crontab -l 2>/dev/null | sed '/# panel-kid:begin/,/# panel-kid:end/d')
+	printf "%s\n# panel-kid:begin\n* * * * * /usr/sbin/panel-kid-apply >/dev/null 2>&1\n# panel-kid:end\n" "$_CRON" | crontab - 2>/dev/null || printf "%s\n# panel-kid:begin\n* * * * * /usr/sbin/panel-kid-apply >/dev/null 2>&1\n# panel-kid:end\n" "$_CRON" > /var/spool/cron/crontabs/root
+	/etc/init.d/cron restart >/dev/null 2>&1
+}
+
+kid_paused_mac() {
+	_kp=""
+	for _ks in $(uci -q show panel-kid 2>/dev/null | sed -n 's/^panel-kid\.\([A-Za-z0-9_-]*\)=kiddev$/\1/p'); do
+		_kp_on=$(uci -q get "panel-kid.$_ks.paused")
+		_kp_mac=$(uci -q get "panel-kid.$_ks.mac")
+		[ "$_kp_on" = "1" ] || continue
+		[ -n "$_kp_mac" ] || continue
+		_kp="$_kp $(printf "%s" "$_kp_mac" | tr 'A-F' 'a-f')"
+	done
+	echo "$_kp"
+}
+
+kid_status_json() {
+	json_init
+	json_add_string "status" "ok"
+	json_add_boolean "installed" 1
+	_KM=$(uci -q get panel-kid.main.master); [ -z "$_KM" ] && _KM=1
+	_KA=$(uci -q get panel-kid.main.auto_bedtime); [ -z "$_KA" ] && _KA=0
+	json_add_boolean "master" "$_KM"
+	json_add_boolean "auto_bedtime" "$_KA"
+	json_add_string "bedtime_start" "$(uci -q get panel-kid.main.bedtime_start)"
+	json_add_string "bedtime_end" "$(uci -q get panel-kid.main.bedtime_end)"
+	_KE=$(cat /tmp/panel-kid-effective 2>/dev/null); [ -z "$_KE" ] && _KE="$_KM"
+	json_add_boolean "effective" "$_KE"
+	json_add_array "blocks"
+	for _kc in $(uci -q get panel-kid.main.blocks 2>/dev/null); do json_add_string "" "$_kc"; done
+	json_close_array
+	_KP=$(kid_paused_mac)
+	json_add_array "paused"
+	for _km in $_KP; do json_add_string "" "$_km"; done
+	json_close_array
+	json_add_array "devices"
+	_KNOW=$(date +%s)
+	_KRMAC=$(cat /sys/class/net/br-lan/address 2>/dev/null | tr 'A-F' 'a-f')
+	_KSEEN=""
+	while read _kexp _km _ki _kh _kc2; do
+		[ -n "$_km" ] || continue
+		case "$_km" in ??:??:??:??:??:??) ;; *) continue ;; esac
+		_km=$(printf "%s" "$_km" | tr 'A-F' 'a-f')
+		[ "$_km" = "$_KRMAC" ] && continue
+		case " $_KSEEN " in *" $_km "*) continue ;; esac
+		_KSEEN="$_KSEEN $_km"
+		_kon=0; if [ "${_kexp:-0}" -gt "$_KNOW" ] 2>/dev/null; then _kon=1; fi
+		_kp2=0; case " $_KP " in *" $_km "*) _kp2=1 ;; esac
+		json_add_object
+		json_add_string "mac" "$_km"
+		json_add_string "ip" "$_ki"
+		json_add_string "name" "$_kh"
+		json_add_boolean "online" "$_kon"
+		json_add_boolean "paused" "$_kp2"
+		json_close_object
+	done < /tmp/dhcp.leases
+	json_close_array
+	json_dump
+}
+
+kid_norm_on() {
+	case "$1" in 1|true|on) echo 1 ;; 0|false|off|"") echo 0 ;; *) echo bad ;; esac
+}
+
 # Helper: return JSON error and exit 0 for rpcd
 return_error() {
 	json_init
@@ -138,15 +328,22 @@ generate_singbox_config() {
 	FP="firefox"
 	FLOW="xtls-rprx-vision"
 
+	PROTO="vless"
+	PW=""
+	METH=""
 	if [ -f "$NODE_CONF" ]; then
-		SERVER=$(jsonfilter -i "$NODE_CONF" -e '@.server' 2>/dev/null)
-		PORT=$(jsonfilter -i "$NODE_CONF" -e '@.port' 2>/dev/null)
-		UUID=$(jsonfilter -i "$NODE_CONF" -e '@.uuid' 2>/dev/null)
-		SNI=$(jsonfilter -i "$NODE_CONF" -e '@.sni' 2>/dev/null)
-		PUBKEY=$(jsonfilter -i "$NODE_CONF" -e '@.publicKey' 2>/dev/null)
-		SHORTID=$(jsonfilter -i "$NODE_CONF" -e '@.shortId' 2>/dev/null)
-		FP=$(jsonfilter -i "$NODE_CONF" -e '@.fingerprint' 2>/dev/null)
-		FLOW=$(jsonfilter -i "$NODE_CONF" -e '@.flow' 2>/dev/null)
+		PROTO=$(jsonfilter -i "$NODE_CONF" -e '@.protocol' 2>/dev/null | head -1)
+		[ -z "$PROTO" ] && PROTO="vless"
+		PW=$(jsonfilter -i "$NODE_CONF" -e '@.password' 2>/dev/null | head -1)
+		METH=$(jsonfilter -i "$NODE_CONF" -e '@.method' 2>/dev/null | head -1)
+		SERVER=$(jsonfilter -i "$NODE_CONF" -e '@.server' -e '@.node.server' 2>/dev/null)
+		PORT=$(jsonfilter -i "$NODE_CONF" -e '@.port' -e '@.node.port' 2>/dev/null)
+		UUID=$(jsonfilter -i "$NODE_CONF" -e '@.uuid' -e '@.node.uuid' 2>/dev/null)
+		SNI=$(jsonfilter -i "$NODE_CONF" -e '@.sni' -e '@.node.sni' 2>/dev/null)
+		PUBKEY=$(jsonfilter -i "$NODE_CONF" -e '@.publicKey' -e '@.node.publicKey' 2>/dev/null)
+		SHORTID=$(jsonfilter -i "$NODE_CONF" -e '@.shortId' -e '@.node.shortId' 2>/dev/null)
+		FP=$(jsonfilter -i "$NODE_CONF" -e '@.fingerprint' -e '@.node.fingerprint' 2>/dev/null)
+		FLOW=$(jsonfilter -i "$NODE_CONF" -e '@.flow' -e '@.node.flow' 2>/dev/null)
 	fi
 
 	if [ -z "$SERVER" ] && [ -f /etc/sing-box/config.json ]; then
@@ -158,10 +355,80 @@ generate_singbox_config() {
 		SHORTID=$(jsonfilter -i /etc/sing-box/config.json -e '@.outbounds[0].tls.reality.short_id' 2>/dev/null)
 	fi
 
+	# Rehydrate missing node secrets from subscription cache (active_node.json
+	# written by the balancer may only carry server/port/name — regenerating from
+	# it must NOT produce an outbound with empty uuid/reality keys).
+	if { [ -z "$UUID" ] || [ -z "$PUBKEY" ]; } && [ -n "$SERVER" ] && [ -f /etc/orbix/subscriptions.json ]; then
+		NODE_FILL=$(ucode -e '
+			let fs = require("fs");
+			let d = json(fs.readfile("/etc/orbix/subscriptions.json") || "{}") || {};
+			let nodes = d.nodes || [];
+			for (let i = 0; i < length(nodes); i++) {
+				let n = nodes[i];
+				if (!n || n.server != ARGV[0] || "" + n.port != ARGV[1]) continue;
+				print(join("|", [n.uuid || "", n.publicKey || n.pbk || "", n.shortId || n.sid || "", n.sni || "", n.fingerprint || "", n.flow || "", n.protocol || "", n.password || "", n.method || ""]));
+				break;
+			}
+		' "$SERVER" "$PORT" 2>/dev/null | head -n1)
+		if [ -n "$NODE_FILL" ]; then
+			[ -z "$UUID" ] && UUID=$(printf '%s' "$NODE_FILL" | cut -d'|' -f1)
+			[ -z "$PUBKEY" ] && PUBKEY=$(printf '%s' "$NODE_FILL" | cut -d'|' -f2)
+			[ -z "$SHORTID" ] && SHORTID=$(printf '%s' "$NODE_FILL" | cut -d'|' -f3)
+			[ -z "$SNI" ] && SNI=$(printf '%s' "$NODE_FILL" | cut -d'|' -f4)
+			[ -z "$FP" ] && FP=$(printf '%s' "$NODE_FILL" | cut -d'|' -f5)
+			[ -z "$FLOW" ] && FLOW=$(printf '%s' "$NODE_FILL" | cut -d'|' -f6)
+			RP=$(printf '%s' "$NODE_FILL" | cut -d'|' -f7)
+			[ -n "$RP" ] && PROTO="$RP"
+			[ -z "$PW" ] && PW=$(printf '%s' "$NODE_FILL" | cut -d'|' -f8)
+			[ -z "$METH" ] && METH=$(printf '%s' "$NODE_FILL" | cut -d'|' -f9)
+		fi
+	fi
 	[ -z "$FP" ] && FP="firefox"
 	[ -z "$FLOW" ] && FLOW="xtls-rprx-vision"
 	[ -z "$SNI" ] && SNI="$SERVER"
 	[ -z "$PORT" ] && PORT=443
+
+	# Hard guard: never regenerate sing-box config with empty node secrets —
+	# keep the working config instead (caller reports the failure).
+	NODE_OK=0
+	case "$PROTO" in
+		vless)   [ -n "$UUID" ] && NODE_OK=1 ;;
+		trojan|hysteria2|hysteria)
+			[ -n "$PW" ] && NODE_OK=1 ;;
+		ss|shadowsocks)
+			[ -n "$PW" ] && [ -n "$METH" ] && NODE_OK=1 ;;
+		*) NODE_OK=1 ;;
+	esac
+	if [ "$NODE_OK" = "0" ]; then
+		logger -t singbox-gen "abort regenerate: node $SERVER:$PORT ($PROTO) lacks required secrets (active_node.json/subscriptions.json)"
+		return 1
+	fi
+	OUTBOUND_JSON=$(ucode -e '
+		// ucode ARGV is 0-based: 0=server 1=port 2=uuid 3=sni 4=fp 5=pubkey
+		// 6=shortid 7=(unused) 8=flow 9=proto 10=password 11=method
+		if (length(ARGV) < 10 || ARGV[0] == "" || int(ARGV[1]) <= 0) exit;
+		let ob = { tag: "proxy", server: ARGV[0], server_port: int(ARGV[1]) };
+		switch (ARGV[9]) {
+		case "trojan":
+			ob.type = "trojan"; ob.password = ARGV[10];
+			ob.tls = { enabled: true, server_name: ARGV[3] || ARGV[0] };
+			break;
+		case "ss": case "shadowsocks":
+			ob.type = "shadowsocks"; ob.method = ARGV[11]; ob.password = ARGV[10];
+			break;
+		case "hysteria2": case "hysteria":
+			ob.type = "hysteria2"; ob.password = ARGV[10];
+			ob.tls = { enabled: true, server_name: ARGV[3] || "" };
+			break;
+		default:
+			ob.type = "vless"; ob.uuid = ARGV[2]; ob.flow = ARGV[8];
+			ob.tls = { enabled: true, server_name: ARGV[3] || ARGV[0], utls: { enabled: true, fingerprint: ARGV[4] || "firefox" } };
+			if (ARGV[5] != "") ob.tls.reality = { enabled: true, public_key: ARGV[5], short_id: ARGV[6] };
+			else ob.tls.reality = { enabled: false };
+		}
+		print(sprintf("%J", ob));
+	' "$SERVER" "$PORT" "$UUID" "${SNI:-$SERVER}" "$FP" "$PUBKEY" "$SHORTID" "" "$FLOW" "$PROTO" "$PW" "$METH" 2>/dev/null)
+[ -z "$OUTBOUND_JSON" ] && { logger -t singbox-gen "abort: outbound builder failed"; return 1; }
 
 	POL_FILE="/etc/orbix/policies.json"
 	BLOCKED_DOMS=""
@@ -227,6 +494,87 @@ generate_singbox_config() {
 	PROXY_JSON=$(format_json_array "$CLEAN_PROXY")
 	DIRECT_JSON=$(format_json_array "$CLEAN_DIRECT")
 
+	# Tier engine injection (from /etc/orbix/tiers.json, written by tiers_commit)
+	TIER_FINAL=""
+	TIER_RULES_JSON=""
+	if [ -s /etc/orbix/tiers.json ]; then
+		TIER_TMP=/tmp/orbx-tier-sb.json
+		ucode -e '
+			let fs = require("fs");
+			let t = json(fs.readfile("/etc/orbix/tiers.json") || "{}") || {};
+			if (!t.version) exit;
+			let d1 = ["ru", "xn--p1ai", "su"];
+			for (let d in (t.tier1 && t.tier1.domains) || []) push(d1, d);
+			let n1 = (t.tier1 && t.tier1.networks) || [];
+			let d2 = (t.tier2 && t.tier2.domains) || [];
+			// discord is cut by DPI on RU lines under every nfqws strategy we
+			// measured; if a stale config still lists it as L2 it belongs in L3
+			let d3 = (t.tier3ExtraDomains) || [];
+			let keep = [];
+			for (let d in d2) { if (!index(d, "discord")) push(keep, d); else push(d3, d); }
+			d2 = keep;
+			let fin = (t.proxyEnabled === false) ? "direct" : "proxy";
+			fs.writefile("/tmp/orbx-tier-sb.json", sprintf("%J", { final: fin, na: (t.withAntizapret !== false), d1: d1, n1: n1, d2: d2, d3: d3 }));
+		' 2>/dev/null
+		if [ -s "$TIER_TMP" ]; then
+			TIER_FINAL=$(jsonfilter -i "$TIER_TMP" -e '@.final' 2>/dev/null | head -1)
+			TIER_NA=$(jsonfilter -i "$TIER_TMP" -e '@.na' 2>/dev/null | head -1)
+			T_D1=$(jsonfilter -i "$TIER_TMP" -e '@.d1[*]' 2>/dev/null)
+			T_N1=$(jsonfilter -i "$TIER_TMP" -e '@.n1[*]' 2>/dev/null)
+			T_D2=$(jsonfilter -i "$TIER_TMP" -e '@.d2[*]' 2>/dev/null)
+			T_D3=$(jsonfilter -i "$TIER_TMP" -e '@.d3[*]' 2>/dev/null)
+			TJ_D1=$(format_json_array "$T_D1")
+			TJ_N1=$(format_json_array "$T_N1")
+			TJ_D2=$(format_json_array "$T_D2")
+			TJ_D3=$(format_json_array "$T_D3")
+			TIER_P3=""
+			if [ -n "$T_D3" ]; then
+				TIER_P3=',
+      {
+        "domain_suffix": '"$TJ_D3"',
+        "outbound": "proxy"
+      },'
+			fi
+			TIER_RULES_JSON="$TIER_P3"$'
+      {
+        "domain_suffix": '"$TJ_D1"',
+        "outbound": "direct"
+      },
+      {
+        "ip_cidr": '"$TJ_N1"$',
+        "outbound": "direct"
+      },
+      {
+        "domain_suffix": '"$TJ_D2"$',
+        "outbound": "direct"
+      }'
+		fi
+		rm -f "$TIER_TMP"
+	fi
+
+	RULE_SET_BLOCK=""
+	RULE_SET_RULE=""
+	if [ -f "/etc/sing-box/antizapret.srs" ]; then
+		RULE_SET_BLOCK=',
+    "rule_set": [
+      {
+        "tag": "antizapret",
+        "type": "local",
+        "format": "binary",
+        "path": "/etc/sing-box/antizapret.srs"
+      }
+    ]'
+		RULE_SET_RULE=',
+      {
+        "rule_set": ["antizapret"],
+        "outbound": "proxy"
+      }'
+	fi
+	if [ "$TIER_NA" = "false" ]; then
+		RULE_SET_BLOCK=""
+		RULE_SET_RULE=""
+	fi
+
 	mkdir -p /etc/sing-box /tmp/singbox
 	cat << EOF > /tmp/singbox/config.json.tmp
 {
@@ -257,35 +605,22 @@ generate_singbox_config() {
     }
   ],
   "outbounds": [
-    {
-      "type": "vless",
-      "tag": "proxy",
-      "server": "$SERVER",
-      "server_port": $PORT,
-      "uuid": "$UUID",
-      "flow": "$FLOW",
-      "tls": {
-        "enabled": true,
-        "server_name": "${SNI:-$SERVER}",
-        "utls": { "enabled": true, "fingerprint": "$FP" },
-        "reality": {
-          "enabled": $( [ -n "$PUBKEY" ] && echo "true" || echo "false" ),
-          "public_key": "$PUBKEY",
-          "short_id": "$SHORTID"
-        }
-      }
-    },
+    $OUTBOUND_JSON,
     {
       "type": "direct",
       "tag": "direct"
     }
   ],
   "route": {
-    "auto_detect_interface": true,
+    "auto_detect_interface": true$RULE_SET_BLOCK,
     "rules": [
       {
         "inbound": "dns-in",
         "action": "hijack-dns"
+      },
+      {
+        "inbound": "mixed-in",
+        "outbound": "proxy"
       },
       {
         "action": "sniff"
@@ -309,7 +644,9 @@ generate_singbox_config() {
           "91.108.56.0/22",
           "91.105.192.0/23",
           "149.154.160.0/20",
-          "185.76.151.0/24"
+          "185.76.151.0/24",
+          "104.18.32.47",
+          "172.64.155.209"
         ],
         "outbound": "proxy"
       }$([ -n "$CLEAN_BLOCKED" ] && echo ",
@@ -324,9 +661,9 @@ generate_singbox_config() {
       {
         \"domain_suffix\": $DIRECT_JSON,
         \"outbound\": \"direct\"
-      }")
+      }")$TIER_RULES_JSON$RULE_SET_RULE
     ],
-    "final": "direct",
+    "final": "${TIER_FINAL:-direct}",
     "default_domain_resolver": "yandex"
   },
   "dns": {
@@ -336,6 +673,7 @@ generate_singbox_config() {
         "type": "https",
         "server": "dns.google",
         "server_port": 443,
+        "detour": "proxy",
         "domain_resolver": "yandex"
       },
       {
@@ -343,6 +681,7 @@ generate_singbox_config() {
         "type": "tls",
         "server": "dns.google",
         "server_port": 853,
+        "detour": "proxy",
         "domain_resolver": "yandex"
       },
       {
@@ -363,15 +702,87 @@ generate_singbox_config() {
 }
 EOF
 
-	if sing-box check -c /tmp/singbox/config.json.tmp >/dev/null 2>&1; then
+	if sing-box check -c /tmp/singbox/config.json.tmp >>/tmp/orbx-sbcheck.log 2>&1; then
 		mv /tmp/singbox/config.json.tmp /etc/sing-box/config.json
-		/etc/init.d/sing-box restart >/dev/null 2>&1 &
+		RESTART_OUT=$(/etc/init.d/sing-box restart 2>&1)
+		RESTART_CODE=$?
+		if [ "$RESTART_CODE" -ne 0 ]; then
+			logger -t orbix "sing-box restart failed (exit $RESTART_CODE): $RESTART_OUT"
+			return 2
+		fi
+		( sleep 1; /etc/init.d/pbr reload ) >/dev/null 2>&1 &
 		return 0
 	else
 		rm -f /tmp/singbox/config.json.tmp
 		return 1
 	fi
 }
+
+# ---------- zapret helpers ----------
+# This package variant uses section type 'main' named 'config' => uci path zapret.config.<field>.
+# Older/official builds used 'main'. Try both, config first.
+zg() {
+	uci -q get "zapret.config.$1" 2>/dev/null || uci -q get "zapret.main.$1" 2>/dev/null
+}
+zs() {
+	uci -q set "zapret.config.$1=$2" 2>/dev/null || uci -q set "zapret.main.$1=$2"
+}
+zrestart_bg() {
+	# hostlist/ipset reload can exceed rpcd call timeout; run detached, caller polls zapret_status
+	setsid /etc/init.d/zapret restart >/tmp/zapret-panel-restart.log 2>&1 < /dev/null &
+}
+zvalidate_opt() {
+	# Reject command-substitution/injection patterns and oversized payloads
+	case "$1" in
+		*'$('*|*'`'*|*'<('*|*'>('*|*';;'*|*'&'*) return 1 ;;
+	esac
+	if [ "${#1}" -gt 20000 ]; then return 2; fi
+	return 0
+}
+
+# --- fw4 flow-offloading fix (ported from StressOzz/Zapret-Manager) ---
+# When fw4 flow offloading is on, connections are cut out of the nft path
+# immediately and zapret's NFQUEUE rules never see the DPI-critical first
+# packets. The fix guards the template's flow-offload statement with
+# "ct original packets ge 30" so flows only offload after 30 packets.
+ORBX_TPL=/usr/share/firewall4/templates/ruleset.uc
+orbx_offload_mode() {
+	if [ "$(uci -q get firewall.@defaults[0].flow_offloading_hw 2>/dev/null)" = 1 ] && [ "$(uci -q get firewall.@defaults[0].flow_offloading 2>/dev/null)" = 1 ]; then echo hw
+	elif [ "$(uci -q get firewall.@defaults[0].flow_offloading 2>/dev/null)" = 1 ]; then echo sw
+	else echo none; fi
+}
+orbx_fix_applied() { grep -q 'ct original packets ge 30 flow offload @ft;' "$ORBX_TPL" 2>/dev/null; }
+orbx_zapret_installed() { [ -f /etc/config/zapret ] || [ -x /etc/init.d/zapret ]; }
+# Idempotent template patch. Returns: 0=ok (applied or already in state), 2=pattern/template missing
+orbx_tpl_fix() { # $1 = 1|0 want fix
+	_t="$ORBX_TPL.orbx.tmp.$$"
+	[ -f "$ORBX_TPL" ] || return 2
+	awk -v zf="$1" '
+		BEGIN { re = "^[ 	]*meta l4proto [{] tcp, udp [}] (ct original packets ge 30 )?flow offload @ft;$" }
+		!done && $0 ~ re {
+			ind = $0; sub(/meta l4proto.*$/, "", ind)
+			hz = index($0, "ct original packets ge 30 ") > 0
+			if (zf == "1") hz = 1; else hz = 0
+			n = ind "meta l4proto { tcp, udp } " (hz ? "ct original packets ge 30 " : "") "flow offload @ft;"
+			if (n != $0) ch = 1
+			print n; done = 1; next
+		}
+		{ print }
+		END { exit done ? (ch ? 0 : 1) : 2 }' "$ORBX_TPL" > "$_t"
+	rc=$?
+	case "$rc" in
+		0) cat "$_t" > "$ORBX_TPL"; rm -f "$_t"; return 0 ;;
+		1) rm -f "$_t"; return 0 ;;
+		*) rm -f "$_t"; return 2 ;;
+	esac
+}
+
+# --- NFQWS port-list helpers (normalize/dedupe; port of Zapret-Manager _zp_calc) ---
+zport_norm() { # busybox sort lacks -t/-k: numeric pad via awk on leading number
+	tr ',' '\n' | sed '/^$/d' | sort -u | awk '{ n = $0 + 0; printf "%09d|%s\n", n, $0 }' | sort | sed 's/^[0-9]*|//' | tr '\n' ',' | sed 's/,$//'; }
+zreq_ports() { # $1=tcp|udp, NFQWS_OPT on stdin -> union of --filter-$1= values
+	tr ' \n' '\n\n' | grep "^--filter-$1=" | cut -d= -f2- | tr '\n' ',' | zport_norm; }
+_n_num() { case "$1" in ''|*[!0-9]*) echo 0 ;; *) echo "$1" ;; esac; }
 
 case "$1" in
 	list)
@@ -393,9 +804,128 @@ case "$1" in
 		json_add_object "zapret_status"
 		json_close_object
 
+		json_add_object "zapret_get_options"
+		json_close_object
+
+		json_add_object "zapret_set_options"
+		json_add_boolean "nfqws_enable" 1
+		json_add_string "ports_tcp" "str"
+		json_add_string "ports_udp" "str"
+		json_add_string "mode_filter" "str"
+		json_add_string "run_on_boot" "str"
+		json_add_string "nfqws_opt" "str"
+		json_add_boolean "restart" 1
+		json_close_object
+
+		json_add_object "zapret_import_chunk"
+		json_add_string "file" "str"
+		json_add_string "b64" "str"
+		json_add_boolean "last" 1
+		json_close_object
+
+		json_add_object "zapret_import_profile"
+		json_add_string "name" "str"
+		json_add_string "nfqws_opt" "str"
+		json_add_string "ports_tcp" "str"
+		json_add_string "ports_udp" "str"
+		json_add_string "mode" "str"
+		json_add_string "files" "str"
+		json_add_boolean "restart" 1
+		json_close_object
+
+		json_add_object "zapret_restore_backup"
+		json_add_string "file" "str"
+		json_close_object
+
+		json_add_object "zapret_list_files"
+		json_close_object
+
+		json_add_object "node_balancer_status"
+		json_close_object
+
+		json_add_object "node_balancer_run"
+		json_close_object
+		json_add_object "sub_refresh"
+		json_close_object
+
+		json_add_object "sub_set_source"
+		json_close_object
+
+		json_add_object "kid_status"
+		json_close_object
+
+		json_add_object "kid_set_master"
+		json_add_boolean "on" 1
+		json_close_object
+
+		json_add_object "kid_set_device"
+		json_add_string "mac" "str"
+		json_add_boolean "on" 1
+		json_add_string "name" "str"
+		json_close_object
+
+		json_add_object "kid_set_block"
+		json_add_string "category" "str"
+		json_add_boolean "on" 1
+		json_close_object
+
+		json_add_object "kid_set_bedtime"
+		json_add_boolean "on" 1
+		json_add_string "start" "str"
+		json_add_string "end" "str"
+		json_close_object
+
 		json_add_object "zapret_test_strategy"
 		json_add_string "domain" "str"
 		json_add_string "strategy" "str"
+		json_close_object
+
+		json_add_object "zapret_flowoff_status"
+		json_close_object
+
+		json_add_object "zapret_flowoff_fix"
+		json_add_string "enable" "boolean"
+		json_close_object
+
+		json_add_object "zapret_ports_sync"
+		json_close_object
+
+		json_add_object "zapret_auto_test"
+		json_add_boolean "apply_best"
+		json_close_object
+
+		json_add_object "zapret_auto_status"
+		json_close_object
+
+		json_add_object "zaptest_stop"
+		json_close_object
+
+		json_add_object "watchdog_status"
+		json_close_object
+
+		json_add_object "watchdog_set"
+		json_add_boolean "enable"
+		json_add_string "interval_min" "int"
+		json_add_boolean "run_now"
+		json_close_object
+
+		json_add_object "tiers_stage"
+		json_add_string "part" "nft|routes|dnsmasq|config|singbox"
+		json_add_string "seq" "int"
+		json_add_string "chunk" "base64"
+		json_add_boolean "final"
+		json_close_object
+
+		json_add_object "tiers_commit"
+		json_close_object
+
+		json_add_object "tiers_disable"
+		json_close_object
+
+		json_add_object "tiers_status"
+		json_close_object
+
+		json_add_object "tiers_get"
 		json_close_object
 
 		json_add_object "vless_status"
@@ -417,6 +947,20 @@ case "$1" in
 
 		json_add_object "pbr_trace"
 		json_add_string "target" "str"
+		json_close_object
+
+		json_add_object "pbr_rule_upsert"
+		json_add_string "id" "str"
+		json_add_string "name" "str"
+		json_add_boolean "enabled" 1
+		json_add_string "interface" "str"
+		json_add_string "src_addr" "str"
+		json_add_string "dest_addr" "str"
+		json_add_string "proto" "str"
+		json_close_object
+
+		json_add_object "pbr_rule_delete"
+		json_add_string "id" "str"
 		json_close_object
 
 		json_add_object "arm_rollback"
@@ -842,26 +1386,37 @@ case "$1" in
 				RUNNING=0
 				(pidof nfqws || pgrep nfqws) >/dev/null 2>&1 && RUNNING=1
 
+				ZAPRET_INSTALLED=0
+				if [ -f /etc/config/zapret ] || [ -x /opt/zapret/init.d/zapret ] || [ -x /etc/init.d/zapret ] || [ "$RUNNING" = "1" ]; then
+					ZAPRET_INSTALLED=1
+				fi
+
 				ENABLED=0
-				VAL=$(uci -q get zapret.main.NFQWS_ENABLE || uci -q get zapret.main.run_on_boot)
+				VAL=$(zg NFQWS_ENABLE)
+				[ -z "$VAL" ] && VAL=$(zg run_on_boot)
 				[ "$VAL" = "1" ] && ENABLED=1
 
-				FWTYPE=$(uci -q get zapret.main.FWTYPE || echo "nftables")
-				MODE_FILTER=$(uci -q get zapret.main.MODE_FILTER || echo "hostlist")
-				PORTS_TCP=$(uci -q get zapret.main.NFQWS_PORTS_TCP || echo "80,443")
-				PORTS_UDP=$(uci -q get zapret.main.NFQWS_PORTS_UDP || echo "")
-				NFQWS_OPT=$(uci -q get zapret.main.NFQWS_OPT)
+				FWTYPE=$(zg FWTYPE || echo "nftables")
+				MODE_FILTER=$(zg MODE_FILTER || echo "hostlist")
+				PORTS_TCP=$(zg NFQWS_PORTS_TCP || echo "80,443")
+				PORTS_UDP=$(zg NFQWS_PORTS_UDP || echo "")
+				NFQWS_OPT=$(zg NFQWS_OPT)
+				[ -z "$NFQWS_OPT" ] && NFQWS_OPT=$(zg NFQWS_OPT_TCP)
 
 				json_init
+				json_add_boolean "installed" "$ZAPRET_INSTALLED"
 				json_add_boolean "running" "$RUNNING"
 				json_add_boolean "enabled" "$ENABLED"
 				json_add_string "fwtype" "$FWTYPE"
 				json_add_string "mode_filter" "$MODE_FILTER"
 				json_add_string "ports_tcp" "$PORTS_TCP"
 				json_add_string "ports_udp" "$PORTS_UDP"
+				json_add_string "nfqws_opt" "$NFQWS_OPT"
+				json_add_int "nfqws_opt_len" "${#NFQWS_OPT}"
 
-				# Profiles array parsed from configuration
+				# Profiles array parsed from configuration (only when zapret is actually present)
 				json_add_array "profiles"
+				if [ "$ZAPRET_INSTALLED" = "1" ]; then
 
 				# Profile 1: TCP HTTPS
 				json_add_object
@@ -872,15 +1427,17 @@ case "$1" in
 				json_add_string "protocol" "tcp"
 				json_add_string "ports" "$PORTS_TCP"
 
-				# Methods
+				# Methods parsed per-protocol from the real NFQWS_OPT --new sections
 				json_add_array "methods"
-				if echo "$NFQWS_OPT" | grep -q "hostfakesplit"; then
-					json_add_string "" "hostfakesplit"
-				elif echo "$NFQWS_OPT" | grep -q "multisplit"; then
-					json_add_string "" "multisplit"
+				FLAT=$(printf '%s' "$NFQWS_OPT" | tr '\n' ' ')
+				TCPD=$(printf '%s' "$FLAT" | sed 's/--new/\n/g' | grep -- '--filter-tcp' | grep -o -- '--dpi-desync=[^ ]*' | head -n 1 | cut -d= -f2)
+				[ -z "$TCPD" ] && TCPD=$(printf '%s' "$(zg NFQWS_OPT_TCP)" | grep -o -- '--dpi-desync=[^ ]*' | head -n 1 | cut -d= -f2)
+				if [ -n "$TCPD" ]; then
+					for m in $(printf '%s' "$TCPD" | tr ',' ' '); do
+						json_add_string "" "$m"
+					done
 				else
-					json_add_string "" "fake"
-					json_add_string "" "disorder"
+					json_add_string "" "none"
 				fi
 				json_close_array
 
@@ -923,7 +1480,15 @@ case "$1" in
 					json_add_string "protocol" "udp"
 					json_add_string "ports" "$PORTS_UDP"
 					json_add_array "methods"
-					json_add_string "" "fake"
+					UDPD=$(printf '%s' "$FLAT" | sed 's/--new/\n/g' | grep -- '--filter-udp' | grep -o -- '--dpi-desync=[^ ]*' | head -n 1 | cut -d= -f2)
+					[ -z "$UDPD" ] && UDPD=$(printf '%s' "$(zg NFQWS_OPT_UDP)" | grep -o -- '--dpi-desync=[^ ]*' | head -n 1 | cut -d= -f2)
+					if [ -n "$UDPD" ]; then
+						for m in $(printf '%s' "$UDPD" | tr ',' ' '); do
+							json_add_string "" "$m"
+						done
+					else
+						json_add_string "" "none"
+					fi
 					json_close_array
 					json_add_array "hostlist"
 					json_close_array
@@ -931,8 +1496,258 @@ case "$1" in
 					json_close_array
 					json_close_object
 				fi
+				fi
 
 				json_close_array
+				json_dump
+			;;
+
+			zapret_get_options)
+				RUNNING=0
+				(pidof nfqws || pgrep nfqws) >/dev/null 2>&1 && RUNNING=1
+				INSTALLED=0
+				[ -f /etc/config/zapret ] && INSTALLED=1
+				EN=$(zg NFQWS_ENABLE)
+				[ -z "$EN" ] && EN=$(zg run_on_boot)
+				[ "$EN" = "1" ] || EN=0
+				OPT=$(zg NFQWS_OPT)
+
+				json_init
+				json_add_boolean "installed" "$INSTALLED"
+				json_add_boolean "running" "$RUNNING"
+				json_add_boolean "nfqws_enable" "$EN"
+				json_add_string "ports_tcp" "$(zg NFQWS_PORTS_TCP)"
+				json_add_string "ports_udp" "$(zg NFQWS_PORTS_UDP)"
+				json_add_string "mode_filter" "$(zg MODE_FILTER)"
+				json_add_string "run_on_boot" "$(zg run_on_boot)"
+				json_add_string "fwtype" "$(zg FWTYPE)"
+				json_add_string "nfqws_opt" "$OPT"
+
+				json_add_array "list_files"
+				for _lf in /opt/zapret/ipset/*.txt /opt/zapret/hosts/*.txt; do
+					[ -f "$_lf" ] || continue
+					_SZ=$(stat -c %s "$_lf" 2>/dev/null)
+					case "$_SZ" in ''|*[!0-9]*) _SZ=0 ;; esac
+					json_add_object
+					json_add_string "name" "$(basename "$_lf")"
+					json_add_string "path" "$_lf"
+					json_add_int "size" "$_SZ"
+					json_close_object
+				done
+				json_close_array
+
+				json_add_array "backups"
+				for _bk in $(ls -1 /opt/zapret/panel-backup/ 2>/dev/null | sort | tail -n 10); do
+					json_add_string "" "$_bk"
+				done
+				json_close_array
+				json_dump
+			;;
+
+			zapret_list_files)
+				json_init
+				json_add_array "list_files"
+				for _lf in /opt/zapret/ipset/*.txt /opt/zapret/hosts/*.txt; do
+					[ -f "$_lf" ] || continue
+					_SZ=$(stat -c %s "$_lf" 2>/dev/null)
+					case "$_SZ" in ''|*[!0-9]*) _SZ=0 ;; esac
+					json_add_object
+					json_add_string "name" "$(basename "$_lf")"
+					json_add_string "path" "$_lf"
+					json_add_int "size" "$_SZ"
+					json_close_object
+				done
+				json_close_array
+				json_add_array "backups"
+				for _bk in $(ls -1 /opt/zapret/panel-backup/ 2>/dev/null | sort | tail -n 10); do
+					json_add_string "" "$_bk"
+				done
+				json_close_array
+				json_dump
+			;;
+
+			zapret_set_options)
+				NFN=$(printf "%s\n" "$input" | jsonfilter -e '@.nfqws_enable' 2>/dev/null)
+				PTCP=$(printf "%s\n" "$input" | jsonfilter -e '@.ports_tcp' 2>/dev/null)
+				PUDP=$(printf "%s\n" "$input" | jsonfilter -e '@.ports_udp' 2>/dev/null)
+				MFILT=$(printf "%s\n" "$input" | jsonfilter -e '@.mode_filter' 2>/dev/null)
+				ROB=$(printf "%s\n" "$input" | jsonfilter -e '@.run_on_boot' 2>/dev/null)
+				NOPT=$(printf "%s\n" "$input" | jsonfilter -e '@.nfqws_opt' 2>/dev/null)
+				RST=$(printf "%s\n" "$input" | jsonfilter -e '@.restart' 2>/dev/null)
+
+				case "$PTCP" in *[!0-9,-]*) return_error "ports_tcp: только цифры, запятые и дефисы" ;; esac
+				case "$PUDP" in *[!0-9,-]*) return_error "ports_udp: только цифры, запятые и дефисы" ;; esac
+				case "$MFILT" in
+					""|hostlist|auto_hostlist|non_tcp|raw) ;;
+					*) return_error "mode_filter: допустимы hostlist, auto_hostlist, non_tcp, raw" ;;
+				esac
+				if [ -n "$NOPT" ]; then
+					zvalidate_opt "$NOPT"
+					case $? in
+						1) return_error "nfqws_opt содержит запрещённые конструкции (\$(, \`, <(, >(; ; &)" ;;
+						2) return_error "nfqws_opt длиннее 20000 символов" ;;
+					esac
+				fi
+
+				# Back current config before any write
+				mkdir -p /opt/zapret/panel-backup 2>/dev/null
+				[ -f /etc/config/zapret ] && cp -f /etc/config/zapret "/opt/zapret/panel-backup/zapret.$(date +%Y%m%d-%H%M%S).opts" 2>/dev/null
+
+				[ -n "$NFN" ] && zs NFQWS_ENABLE "$NFN"
+				[ -n "$PTCP" ] && zs NFQWS_PORTS_TCP "$PTCP"
+				[ "$PUDP"x != "x" ] && zs NFQWS_PORTS_UDP "$PUDP"
+				[ -n "$MFILT" ] && zs MODE_FILTER "$MFILT"
+				[ -n "$ROB" ] && zs run_on_boot "$ROB"
+				[ -n "$NOPT" ] && zs NFQWS_OPT "$NOPT"
+
+				if ! uci commit zapret 2>/dev/null; then
+					return_error "uci commit не прошёл — изменения НЕ сохранены"
+				fi
+
+				# Verify persisted values by reading them back
+				OK=1
+				[ -n "$PTCP" ] && [ "$(zg NFQWS_PORTS_TCP)" != "$PTCP" ] && OK=0
+				[ -n "$NOPT" ] && [ "$(zg NFQWS_OPT)" != "$NOPT" ] && OK=0
+
+				STARTED=0
+				if [ "$OK" = "1" ] && [ "$RST" != "0" ]; then
+					zrestart_bg
+					STARTED=1
+				fi
+
+				json_init
+				json_add_string "status" "ok"
+				json_add_boolean "committed" 1
+				json_add_boolean "verified" "$OK"
+				json_add_boolean "restart_started" "$STARTED"
+				json_add_string "restart_note" "zapret перезапускается в фоне: список хостов перечитывается, дождитесь running=да"
+				json_dump
+			;;
+
+			zapret_import_chunk)
+				_CFILE=$(printf "%s\n" "$input" | jsonfilter -e '@.file' 2>/dev/null)
+				_CB64=$(printf "%s\n" "$input" | jsonfilter -e '@.b64' 2>/dev/null)
+				_CLAST=$(printf "%s\n" "$input" | jsonfilter -e '@.last' 2>/dev/null)
+				_CSAFE=$(printf '%s' "$_CFILE" | tr -cd 'A-Za-z0-9._-' | cut -c1-64)
+				[ -z "$_CSAFE" ] && return_error "chunk: некорректное имя файла"
+				mkdir -p /tmp/zapret-imp
+				printf '%s' "$_CB64" >> "/tmp/zapret-imp/$_CSAFE.b64"
+				_BYTES=0
+				if [ "$_CLAST" = "1" ]; then
+					_DEC_OK=0
+					if command -v base64 >/dev/null 2>&1; then
+						base64 -d "/tmp/zapret-imp/$_CSAFE.b64" > "/tmp/zapret-imp/$_CSAFE" 2>/dev/null && _DEC_OK=1
+					fi
+					if [ "$_DEC_OK" = "0" ] && command -v openssl >/dev/null 2>&1; then
+						openssl base64 -d -A -in "/tmp/zapret-imp/$_CSAFE.b64" > "/tmp/zapret-imp/$_CSAFE" 2>/dev/null && _DEC_OK=1
+						if [ "$_DEC_OK" = "0" ]; then
+							openssl enc -d -base64 -A -in "/tmp/zapret-imp/$_CSAFE.b64" > "/tmp/zapret-imp/$_CSAFE" 2>/dev/null && _DEC_OK=1
+						fi
+					fi
+					if [ "$_DEC_OK" = "0" ]; then
+						rm -f "/tmp/zapret-imp/$_CSAFE.b64" "/tmp/zapret-imp/$_CSAFE"
+						return_error "chunk: повреждённый base64 или нет декодера (base64/openssl) на роутере ($_CSAFE)"
+					fi
+					rm -f "/tmp/zapret-imp/$_CSAFE.b64"
+					_BYTES=$(wc -c < "/tmp/zapret-imp/$_CSAFE" 2>/dev/null)
+					case "$_BYTES" in ''|*[!0-9]*) _BYTES=0 ;; esac
+				fi
+				json_init
+				json_add_string "status" "ok"
+				json_add_string "name" "$_CSAFE"
+				json_add_int "bytes" "$_BYTES"
+				json_dump
+			;;
+
+			zapret_import_profile)
+				_INAME=$(printf "%s\n" "$input" | jsonfilter -e '@.name' 2>/dev/null)
+				_INOPT=$(printf "%s\n" "$input" | jsonfilter -e '@.nfqws_opt' 2>/dev/null)
+				_iPTCP=$(printf "%s\n" "$input" | jsonfilter -e '@.ports_tcp' 2>/dev/null)
+				_iPUDP=$(printf "%s\n" "$input" | jsonfilter -e '@.ports_udp' 2>/dev/null)
+				_ImODE=$(printf "%s\n" "$input" | jsonfilter -e '@.mode' 2>/dev/null)
+				_IFILES=$(printf "%s\n" "$input" | jsonfilter -e '@.files' 2>/dev/null)
+				_iRST=$(printf "%s\n" "$input" | jsonfilter -e '@.restart' 2>/dev/null)
+
+				_INAMES=$(printf '%s' "$_INAME" | tr -cd 'A-Za-z0-9._-' | cut -c1-40)
+				[ -z "$_INAMES" ] && return_error "import: пустое или недопустимое имя профиля"
+				[ -z "$_INOPT" ] && return_error "import: пустая стратегия"
+				zvalidate_opt "$_INOPT"
+				case $? in
+					1) return_error "import: стратегия содержит запрещённые конструкции" ;;
+					2) return_error "import: стратегия длиннее 20000 символов" ;;
+				esac
+				case "$_iPTCP" in *[!0-9,-]*) return_error "import: ports_tcp некорректны" ;; esac
+				case "$_iPUDP" in *[!0-9,-]*) return_error "import: ports_udp некорректны" ;; esac
+
+				# Backup current config before import
+				mkdir -p /opt/zapret/panel-backup /opt/zapret/ipset
+				cp -f /etc/config/zapret "/opt/zapret/panel-backup/zapret.$(date +%Y%m%d-%H%M%S).pre-import" 2>/dev/null
+
+				json_init
+				json_add_string "status" "ok"
+				json_add_array "written"
+				for _cf in $(printf '%s' "$_IFILES" | tr ',' ' '); do
+					_cfs=$(printf '%s' "$_cf" | tr -cd 'A-Za-z0-9._-')
+					[ -z "$_cfs" ] && continue
+					if [ ! -f "/tmp/zapret-imp/$_cfs" ]; then
+						return_error "import: файл чанков не найден: $_cfs (загрузите заново)"
+					fi
+					# Reject binary/control content (allow newline)
+					if LC_ALL=C tr -d '\n' < "/tmp/zapret-imp/$_cfs" | LC_ALL=C grep -q '[[:cntrl:]]'; then
+						rm -f "/tmp/zapret-imp/$_cfs"
+						return_error "import: $_cfs содержит бинарные данные — список отклонён"
+					fi
+					mv "/tmp/zapret-imp/$_cfs" "/opt/zapret/ipset/$_cfs" || return_error "import: не удалось записать /opt/zapret/ipset/$_cfs"
+					json_add_string "" "/opt/zapret/ipset/$_cfs"
+				done
+				json_close_array
+
+				if [ "$_ImODE" = "append" ]; then
+					_OLD=$(zg NFQWS_OPT)
+					if [ -n "$_OLD" ]; then
+						_IFINAL=$(printf '%s\n--new\n%s' "$_OLD" "$_INOPT")
+					else
+						_IFINAL="$_INOPT"
+					fi
+				else
+					_IFINAL="$_INOPT"
+				fi
+
+				zs NFQWS_OPT "$_IFINAL" || return_error "import: uci set NFQWS_OPT не прошёл"
+				[ -n "$_iPTCP" ] && zs NFQWS_PORTS_TCP "$_iPTCP"
+				[ "$_iPUDP"x != "x" ] && zs NFQWS_PORTS_UDP "$_iPUDP"
+				if ! uci commit zapret 2>/dev/null; then
+					return_error "import: uci commit не прошёл — конфиг НЕ применён (бэкап в /opt/zapret/panel-backup)"
+				fi
+
+				_iSTARTED=0
+				if [ "$_iRST" != "0" ]; then
+					zrestart_bg
+					_iSTARTED=1
+				fi
+				json_add_string "mode" "${_ImODE:-replace}"
+				json_add_boolean "committed" 1
+				json_add_boolean "restart_started" "$_iSTARTED"
+				json_add_int "opt_len" "${#_IFINAL}"
+				json_dump
+			;;
+
+			zapret_restore_backup)
+				_RFB=$(printf "%s\n" "$input" | jsonfilter -e '@.file' 2>/dev/null)
+				_RSAFE=$(printf '%s' "$_RFB" | tr -cd 'A-Za-z0-9._-' | cut -c1-80)
+				case "$_RSAFE" in zapret.*) ;; *) return_error "restore: некорректное имя бэкапа" ;; esac
+				_RSRC="/opt/zapret/panel-backup/$_RSAFE"
+				[ -f "$_RSRC" ] || return_error "restore: файл не найден: $_RSAFE"
+				mkdir -p /opt/zapret/panel-backup
+				cp -f /etc/config/zapret "/opt/zapret/panel-backup/zapret.$(date +%Y%m%d-%H%M%S).pre-restore" 2>/dev/null
+				cp -f "$_RSRC" /etc/config/zapret || return_error "restore: не удалось восстановить файл конфига"
+				uci -q show zapret >/dev/null 2>&1
+				zrestart_bg
+				json_init
+				json_add_string "status" "ok"
+				json_add_boolean "restored" 1
+				json_add_string "from" "$_RSAFE"
+				json_add_boolean "restart_started" 1
 				json_dump
 			;;
 
@@ -984,6 +1799,366 @@ case "$1" in
 				json_dump
 			;;
 
+			zapret_flowoff_status)
+				json_init
+				json_add_string "status" "ok"
+				json_add_boolean "zapret_installed" "$(orbx_zapret_installed && echo 1 || echo 0)"
+				json_add_boolean "fw4_tpl" "$([ -f "$ORBX_TPL" ] && echo 1 || echo 0)"
+				json_add_string "offload" "$(orbx_offload_mode)"
+				json_add_boolean "fix_applied" "$(orbx_fix_applied && echo 1 || echo 0)"
+				json_add_boolean "fix_needed" "$([ "$(orbx_offload_mode)" != none ] && orbx_zapret_installed && ! orbx_fix_applied && echo 1 || echo 0)"
+				json_dump
+			;;
+
+			zapret_flowoff_fix)
+				WANT=$(printf "%s\n" "$input" | jsonfilter -e '@.enable' 2>/dev/null | tr -d ' 	\r\n')
+				[ -n "$WANT" ] || WANT=true
+				[ -f "$ORBX_TPL" ] || return_error "firewall4 template not found — cannot manage flow offloading fix"
+				case "$WANT" in true|false) ;; *) return_error "enable must be true or false" ;; esac
+				cp -f "$ORBX_TPL" /tmp/ruleset.uc.orbx.bak
+				if [ "$WANT" = "true" ]; then
+					orbx_tpl_fix 1 || { cp -f /tmp/ruleset.uc.orbx.bak "$ORBX_TPL"; return_error "expected flow-offload statement not found in fw4 template — nothing changed"; }
+					orbx_fix_applied || { cp -f /tmp/ruleset.uc.orbx.bak "$ORBX_TPL"; return_error "fix verification failed — rolled back, nothing changed"; }
+				else
+					orbx_tpl_fix 0 || { cp -f /tmp/ruleset.uc.orbx.bak "$ORBX_TPL"; return_error "fw4 template pattern not found — nothing changed"; }
+				fi
+				if ! /etc/init.d/firewall reload > /tmp/orbx-fw4-reload.log 2>&1; then
+					cp -f /tmp/ruleset.uc.orbx.bak "$ORBX_TPL"
+					/etc/init.d/firewall reload > /dev/null 2>&1
+					return_error "ruleset reload failed — template rolled back ($(tail -n 2 /tmp/orbx-fw4-reload.log | tr '\n' ' '))"
+				fi
+				logger -t orbix "flow-offload fix: enable=$WANT applied, offload=$(orbx_offload_mode)"
+				json_init
+				json_add_string "status" "ok"
+				json_add_boolean "fix_applied" "$(orbx_fix_applied && echo 1 || echo 0)"
+				json_add_string "offload" "$(orbx_offload_mode)"
+				json_add_string "message" "$([ "$(orbx_offload_mode)" = none ] && echo "fix stored; offloading is off so ruleset behavior unchanged" || echo "fix applied and firewall reloaded")"
+				json_dump
+			;;
+
+			zapret_ports_sync)
+				if ! orbx_zapret_installed; then return_error "Zapret is not installed"; fi
+				OPT=$(zg NFQWS_OPT)
+				[ -n "$OPT" ] || OPT=$(zg NFQWS_OPT_TCP)
+				[ -n "$OPT" ] || return_error "No NFQWS_OPT found — nothing to sync"
+				FLAT=$(printf '%s' "$OPT" | tr '\n' ' ')
+				REQ_T=$(printf '%s' "$FLAT" | zreq_ports tcp)
+				REQ_U=$(printf '%s' "$FLAT" | zreq_ports udp)
+				CUR_T=$(zg NFQWS_PORTS_TCP)
+				CUR_U=$(zg NFQWS_PORTS_UDP)
+				NEW_T=$(printf '%s,%s' "${CUR_T:-}" "${REQ_T:-}" | zport_norm)
+				NEW_U=$(printf '%s,%s' "${CUR_U:-}" "${REQ_U:-}" | zport_norm)
+				CHANGED=0
+				if [ -n "$NEW_T" ] && [ "$NEW_T" != "$(printf '%s' "${CUR_T:-}" | zport_norm)" ]; then
+					zs NFQWS_PORTS_TCP "$NEW_T" && CHANGED=1
+				fi
+				if [ -n "$NEW_U" ] && [ "$NEW_U" != "$(printf '%s' "${CUR_U:-}" | zport_norm)" ]; then
+					zs NFQWS_PORTS_UDP "$NEW_U" && CHANGED=1
+				fi
+				if [ "$CHANGED" = "1" ]; then
+					uci commit zapret
+					logger -t orbix "zapret ports synced with strategy: TCP=$NEW_T UDP=$NEW_U"
+					zrestart_bg
+				fi
+				json_init
+				json_add_string "status" "ok"
+				json_add_boolean "changed" "$CHANGED"
+				json_add_string "ports_tcp" "${NEW_T:-$CUR_T}"
+				json_add_string "ports_udp" "${NEW_U:-$CUR_U}"
+				json_add_string "required_tcp" "$REQ_T"
+				json_add_string "required_udp" "$REQ_U"
+				json_add_string "message" "$([ "$CHANGED" = 1 ] && echo "ports updated and zapret restarting" || echo "ports already match strategy (deduped)")"
+				json_dump
+			;;
+
+			zapret_auto_test)
+				[ -x /usr/sbin/panel-zaptest ] || return_error "panel-zaptest not deployed on router"
+				if [ -f /tmp/orbix-zaptest.run ]; then
+					_P=$(cat /tmp/orbix-zaptest.run 2>/dev/null)
+					if [ -n "$_P" ] && kill -0 "$_P" 2>/dev/null; then
+						return_error "test already running (pid $_P)"
+					fi
+				fi
+				AB=$(printf "%s\n" "$input" | jsonfilter -e '@.apply_best' 2>/dev/null | tr -d ' 	\r\n')
+				if [ "$AB" = "true" ]; then
+					setsid /usr/sbin/panel-zaptest --apply-best >/dev/null 2>&1 < /dev/null &
+				else
+					setsid /usr/sbin/panel-zaptest >/dev/null 2>&1 < /dev/null &
+				fi
+				logger -t orbix "zaptest started apply_best=${AB:-false}"
+				json_init
+				json_add_string "status" "ok"
+				json_add_boolean "started" 1
+				json_add_string "message" "Strategy auto-test started; poll zapret_auto_status"
+				json_dump
+			;;
+
+			zapret_auto_status)
+				# crash recovery (ZM _test_recover): config backup exists but runner is dead
+				RECOVERED=0
+				if [ -s /etc/orbix/zaptest.config.bak ]; then
+					_ALIVE=0
+					if [ -f /tmp/orbix-zaptest.run ]; then
+						_P=$(cat /tmp/orbix-zaptest.run 2>/dev/null)
+						[ -n "$_P" ] && kill -0 "$_P" 2>/dev/null && _ALIVE=1
+					fi
+					if [ "$_ALIVE" = "0" ]; then
+						cp -f /etc/orbix/zaptest.config.bak /etc/config/zapret
+						/etc/init.d/zapret restart >/dev/null 2>&1
+						rm -f /etc/orbix/zaptest.config.bak /tmp/orbix-zaptest.run
+						RECOVERED=1
+						logger -t orbix "zaptest recovery: config restored after interrupted test"
+					fi
+				fi
+				RUNNING=0
+				if [ -f /tmp/orbix-zaptest.run ]; then
+					_P=$(cat /tmp/orbix-zaptest.run 2>/dev/null)
+					[ -n "$_P" ] && kill -0 "$_P" 2>/dev/null && RUNNING=1
+				fi
+				CUR=""; IDX=0; TOT=0; BEST=""
+				if [ -f /tmp/orbix-zaptest.state ]; then
+					CUR=$(jsonfilter -i /tmp/orbix-zaptest.state -e '@.cur' 2>/dev/null)
+					IDX=$(jsonfilter -i /tmp/orbix-zaptest.state -e '@.idx' 2>/dev/null)
+					TOT=$(jsonfilter -i /tmp/orbix-zaptest.state -e '@.total' 2>/dev/null)
+					BEST=$(jsonfilter -i /tmp/orbix-zaptest.state -e '@.best' 2>/dev/null)
+				fi
+				json_init
+				json_add_string "status" "ok"
+				json_add_boolean "running" "$RUNNING"
+				json_add_boolean "recovered" "$RECOVERED"
+				json_add_string "cur" "${CUR:-}"
+				json_add_int "idx" "${IDX:-0}"
+				json_add_int "total" "${TOT:-0}"
+				json_add_string "best" "${BEST:-}"
+				json_add_array "results"
+				_SRT=/tmp/orbix-zaptest.sorted.$$
+				if [ -f /tmp/orbix-zaptest.results ]; then
+					awk -F'|' '$1=="S" { printf "%06d %s\n", $3 + 0, $0 }' /tmp/orbix-zaptest.results 2>/dev/null | sort -r | cut -d' ' -f2- > "$_SRT"
+					while IFS='|' read -r _t _n _ok _tot _ts; do
+						[ "${_t:-}" = "S" ] || continue
+						json_add_object
+						json_add_string "name" "$_n"
+						json_add_int "ok" "$(_n_num "$_ok")"
+						json_add_int "total" "$(_n_num "$_tot")"
+						json_add_string "ts" "$_ts"
+						json_close_object
+					done < "$_SRT"
+					rm -f "$_SRT"
+				fi
+				json_close_array
+				json_add_string "log" "$(tail -n 60 /tmp/orbix-zaptest.log 2>/dev/null)"
+				json_dump
+			;;
+
+			zaptest_stop)
+				[ -f /tmp/orbix-zaptest.run ] || return_error "test is not running"
+				touch /tmp/orbix-zaptest.stop
+				json_init
+				json_add_string "status" "ok"
+				json_add_string "message" "stop requested — test will finish current round and restore config"
+				json_dump
+			;;
+
+			watchdog_status)
+				json_init
+				json_add_string "status" "ok"
+				json_add_boolean "installed" "$([ -x /usr/sbin/panel-services-watchdog ] && echo 1 || echo 0)"
+				json_add_boolean "enabled" "$(grep -q '# orbix-watchdog' /etc/crontabs/root 2>/dev/null && echo 1 || echo 0)"
+				json_add_string "spec" "$(grep '# orbix-watchdog' /etc/crontabs/root 2>/dev/null | head -n 1 | awk '{print $1, $2, $3, $4, $5}')"
+				json_add_string "state" "$(cat /tmp/panel-watchdog.state.json 2>/dev/null | head -c 4000)"
+				json_add_string "log" "$(tail -n 25 /tmp/panel-watchdog.log 2>/dev/null | head -c 3000)"
+				json_dump
+			;;
+
+			watchdog_set)
+				[ -x /usr/sbin/panel-services-watchdog ] || return_error "watchdog script not deployed on router"
+				EN=$(printf "%s\n" "$input" | jsonfilter -e '@.enable' 2>/dev/null | tr -d ' 	\r\n')
+				IV=$(printf "%s\n" "$input" | jsonfilter -e '@.interval_min' 2>/dev/null | tr -d ' 	\r\n')
+				RN=$(printf "%s\n" "$input" | jsonfilter -e '@.run_now' 2>/dev/null | tr -d ' 	\r\n')
+				[ -n "$IV" ] || IV=5
+				case "$IV" in ''|*[!0-9]*) return_error "interval_min must be a number";; esac
+				[ "$IV" -ge 1 ] && [ "$IV" -le 59 ] || return_error "interval_min must be between 1 and 59"
+				if [ -n "$EN" ]; then
+					case "$EN" in true|false) ;; *) return_error "enable must be true or false" ;; esac
+					mkdir -p /etc/crontabs
+					touch /etc/crontabs/root
+					sed -i '/# orbix-watchdog$/d' /etc/crontabs/root
+					if [ "$EN" = "true" ]; then
+						if [ "$IV" = "1" ]; then SPEC="* * * * *"; else SPEC="*/$IV * * * *"; fi
+						printf '%s /usr/sbin/panel-services-watchdog >/dev/null 2>&1 # orbix-watchdog\n' "$SPEC" >> /etc/crontabs/root
+					fi
+					/etc/init.d/cron restart >/dev/null 2>&1
+					logger -t orbix "services watchdog $EN (*/$IV min)"
+				fi
+				if [ "$RN" = "true" ]; then
+					setsid /usr/sbin/panel-services-watchdog once >/dev/null 2>&1 < /dev/null &
+				fi
+				json_init
+				json_add_string "status" "ok"
+				json_add_boolean "enabled" "$(grep -q '# orbix-watchdog' /etc/crontabs/root 2>/dev/null && echo 1 || echo 0)"
+				json_add_string "spec" "$(grep '# orbix-watchdog' /etc/crontabs/root 2>/dev/null | head -n 1 | awk '{print $1, $2, $3, $4, $5}')"
+				json_dump
+			;;
+
+			tiers_stage)
+				P=$(printf "%s\n" "$input" | jsonfilter -e '@.part' 2>/dev/null | tr -cd 'a-z')
+				SEQ=$(printf "%s\n" "$input" | jsonfilter -e '@.seq' 2>/dev/null)
+				FINAL=$(printf "%s\n" "$input" | jsonfilter -e '@.final' 2>/dev/null)
+				case "$P" in nft|routes|dnsmasq|config|singbox) ;; *) return_error "tiers_stage: неизвестная часть" ;; esac
+				[ -z "$SEQ" ] && return_error "tiers_stage: нет seq"
+				CHUNK=$(printf "%s\n" "$input" | jsonfilter -e '@.chunk' 2>/dev/null | tr -d ' \r\n\t')
+				[ -z "$CHUNK" ] && return_error "tiers_stage: пустой chunk"
+				[ "${#CHUNK}" -gt 24576 ] && return_error "tiers_stage: chunk длиннее 24KB"
+				[ "$SEQ" = "0" ] && : > "/tmp/orbx-tier-$P.b64"
+				printf '%s' "$CHUNK" >> "/tmp/orbx-tier-$P.b64"
+				if [ "$FINAL" = "1" ] || [ "$FINAL" = "true" ]; then
+					openssl base64 -d -A -in "/tmp/orbx-tier-$P.b64" > "/tmp/orbx-tier-$P.out" 2>/dev/null
+					[ -s "/tmp/orbx-tier-$P.out" ] || return_error "tiers_stage: base64 не распечатался (часть $P)"
+				fi
+				json_init
+				json_add_string "status" "ok"
+				json_add_string "part" "$P"
+				json_dump
+			;;
+
+			tiers_commit)
+				ORBX_NFT=/usr/share/nftables.d/ruleset-post/48-panel-tiers.nft
+				ORBX_DNS=/etc/orbix/dnsmasq-tiers.conf
+				ORBX_RT=/usr/sbin/panel-tier-routes
+				ORBX_CFG=/etc/orbix/tiers.json
+				SB_CFG=/etc/sing-box/config.json
+				for _pf in nft routes dnsmasq config; do
+					[ -s "/tmp/orbx-tier-$_pf.out" ] || { return_error "tiers_commit: нет данных части $_pf (сначала tiers_stage)"; }
+				done
+				BK=/root/orbix-tiers-backup-$(date +%Y%m%d-%H%M%S)
+				mkdir -p "$BK" /etc/orbix /usr/share/nftables.d/ruleset-post
+				cp -f "$ORBX_CFG" "$BK/tiers.json" 2>/dev/null
+				cp -f "$ORBX_NFT" "$BK/48-panel-tiers.nft" 2>/dev/null
+				cp -f "$ORBX_DNS" "$BK/dnsmasq-tiers.conf" 2>/dev/null
+				cp -f "$ORBX_RT" "$BK/panel-tier-routes" 2>/dev/null
+				cp -f "$SB_CFG" "$BK/singbox-config.json" 2>/dev/null
+				cp -f /etc/crontabs/root "$BK/crontabs-root" 2>/dev/null
+				# --- validate staged artifacts BEFORE any write ---
+				SIZE=$(wc -c < /tmp/orbx-tier-nft.out)
+				[ "$SIZE" -ge 100 ] && [ "$SIZE" -le 65536 ] || { return_error "tiers_commit: размер nft вне лимита ($SIZE)"; }
+				grep -q "table inet paneltiers" /tmp/orbx-tier-nft.out || { return_error "tiers_commit: в nft нет table inet paneltiers"; }
+				nft -c -f /tmp/orbx-tier-nft.out 2>/tmp/orbx-nft.err || { R=$(head -c 300 /tmp/orbx-nft.err); return_error "tiers_commit: nft -c не прошёл: $R"; }
+				[ -s /tmp/orbx-tier-config.out ] && jsonfilter -i /tmp/orbx-tier-config.out -e '@.version' >/dev/null 2>&1 || { rm -f /tmp/orbx-tier-config.out; }
+				[ -s /tmp/orbx-tier-config.out ] || { return_error "tiers_commit: tiers.json не валидный JSON"; }
+				[ "$(wc -c < /tmp/orbx-tier-routes.out)" -le 8192 ] || { return_error "tiers_commit: routes больше 8KB"; }
+				grep -q 'ip route' /tmp/orbx-tier-routes.out || { return_error "tiers_commit: в routes нет ip route (пустой/битый файл)"; }
+				sh -n /tmp/orbx-tier-routes.out || { return_error "tiers_commit: routes не проходит sh -n"; }
+				SB_APPLIED=0
+				# --- write artifacts ---
+				cp -f /tmp/orbx-tier-nft.out "$ORBX_NFT"
+				cp -f /tmp/orbx-tier-routes.out "$ORBX_RT"; chmod 755 "$ORBX_RT"
+				cp -f /tmp/orbx-tier-dnsmasq.out "$ORBX_DNS"
+				cp -f /tmp/orbx-tier-config.out "$ORBX_CFG"
+				if [ -s /etc/sing-box/active_node.json ]; then
+					generate_singbox_config >>/tmp/orbx-sb-gen.log 2>&1; [ $? -eq 0 ] && SB_APPLIED=1
+				fi
+				# --- cron self-heal for policy route ---
+				grep -v 'panel-tier-routes' /etc/crontabs/root > /tmp/orbx-cr 2>/dev/null
+				printf '%s\n' '*/5 * * * * /usr/sbin/panel-tier-routes # orbix-tiers' >> /tmp/orbx-cr
+				mv /tmp/orbx-cr /etc/crontabs/root
+				# --- dnsmasq hook: inline block in /etc/dnsmasq.conf ---
+				# (dnsmasq runs under ujail and cannot read files outside its whitelist,
+				#  so the nftset lines are inlined between markers, not conf-file'd)
+				awk 'BEGIN{skip=0} /# BEGIN orbix-tiers/{skip=1; next} /# END orbix-tiers/{skip=0; next} skip{next} {print}' /etc/dnsmasq.conf > /tmp/orbx-dnsc
+				mv /tmp/orbx-dnsc /etc/dnsmasq.conf
+				{ echo "# BEGIN orbix-tiers"; grep -v "^#" /etc/orbix/dnsmasq-tiers.conf | grep -v "^$"; echo "# END orbix-tiers"; } >> /etc/dnsmasq.conf
+				# --- L2 sync: zapret hostlist mode only manipulates listed hosts,
+				# so every tier2 domain must also be in zapret iphost ---
+				ZAP_ADDED=0
+				for _zd in $(grep "#tier2$" /etc/orbix/dnsmasq-tiers.conf 2>/dev/null | sed "s|nftset=/||; s|/inet.*||"); do
+					uci -q get zapret.config.iphost 2>/dev/null | grep -qx "$_zd" || { uci -q add_list zapret.config.iphost="$_zd" && ZAP_ADDED=1; }
+				done
+				if [ "$ZAP_ADDED" = "1" ]; then
+					uci -q commit zapret
+					setsid /etc/init.d/zapret restart >/dev/null 2>&1 < /dev/null &
+				fi
+
+				# --- apply ---
+				/etc/init.d/dnsmasq restart >/dev/null 2>&1
+				/etc/init.d/firewall reload >/dev/null 2>&1
+				sleep 2
+				"$ORBX_RT" >/dev/null 2>&1
+				if [ "$SB_APPLIED" = "1" ]; then
+					sleep 3
+					(pidof sing-box || pgrep sing-box) >/dev/null 2>&1 || return_error "tiers_commit: sing-box не поднялся после перегенерации (бэкап $BK)"
+				fi
+				# uci commit dhcp + firewall reload wipe custom ip rules -> re-assert both
+				/usr/sbin/panel-proxy-route >/dev/null 2>&1
+				"$ORBX_RT" >/dev/null 2>&1
+				# --- verify real kernel state ---
+				VERIFY_NFT=0; VERIFY_RULE=0; VERIFY_DNS=0
+				nft list table inet paneltiers >/dev/null 2>&1 && VERIFY_NFT=1
+				_TABV=$(jsonfilter -i /etc/orbix/tiers.json -e '@.routeTable' 2>/dev/null | head -1)
+				[ -n "${_TABV:-}" ] && ip rule show | grep -q "lookup $_TABV" && VERIFY_RULE=1
+				grep -q 'BEGIN orbix-tiers' /etc/dnsmasq.conf 2>/dev/null && VERIFY_DNS=1
+				rm -f /tmp/orbx-tier-*.b64 /tmp/orbx-tier-*.out /tmp/orbx-sb-new.json /tmp/orbx-nft.err /tmp/orbx-sb.err
+				json_init
+				json_add_string "status" "ok"
+				json_add_boolean "nft_applied" "$VERIFY_NFT"
+				json_add_boolean "route_applied" "$VERIFY_RULE"
+				json_add_boolean "dns_hook_applied" "$VERIFY_DNS"
+				json_add_boolean "singbox_applied" "$SB_APPLIED"
+				json_add_string "backup" "$BK"
+				json_add_string "message" "движок применён; бэкап $BK"
+				json_dump
+			;;
+
+			tiers_disable)
+				rm -f /usr/share/nftables.d/ruleset-post/48-panel-tiers.nft /etc/orbix/dnsmasq-tiers.conf /usr/sbin/panel-tier-routes
+				sed -i '/panel-tier-routes/d' /etc/crontabs/root 2>/dev/null
+				awk 'BEGIN{skip=0} /# BEGIN orbix-tiers/{skip=1; next} /# END orbix-tiers/{skip=0; next} skip{next} {print}' /etc/dnsmasq.conf > /tmp/orbx-dnsc && mv /tmp/orbx-dnsc /etc/dnsmasq.conf
+				/etc/init.d/dnsmasq restart >/dev/null 2>&1
+				/etc/init.d/firewall reload >/dev/null 2>&1
+				sleep 1
+				/usr/sbin/panel-proxy-route >/dev/null 2>&1
+				json_init
+				json_add_string "status" "ok"
+				json_add_boolean "nft_removed" "$([ ! -f /usr/share/nftables.d/ruleset-post/48-panel-tiers.nft ] && echo 1 || echo 0)"
+				json_add_string "message" "трёхуровневый движок снят; трафик по прежней схеме"
+				json_dump
+			;;
+
+			tiers_status)
+				json_init
+				json_add_string "status" "ok"
+				json_add_boolean "nft_installed" "$([ -f /usr/share/nftables.d/ruleset-post/48-panel-tiers.nft ] && echo 1 || echo 0)"
+				json_add_boolean "nft_live" "$(nft list table inet paneltiers >/dev/null 2>&1 && echo 1 || echo 0)"
+				json_add_boolean "routes_installed" "$([ -x /usr/sbin/panel-tier-routes ] && echo 1 || echo 0)"
+				json_add_boolean "dns_hook" "$(grep -q 'BEGIN orbix-tiers' /etc/dnsmasq.conf 2>/dev/null && nft list set inet paneltiers tier2 >/dev/null 2>&1 && echo 1 || echo 0)"
+				json_add_int "cron" "$(grep -c 'panel-tier-routes' /etc/crontabs/root 2>/dev/null)"
+				json_add_string "config_version" "$(jsonfilter -i /etc/orbix/tiers.json -e '@.version' 2>/dev/null | head -1)"
+				AN=/etc/sing-box/active_node.json
+				json_add_string "active_name" "$(jsonfilter -i $AN -e '@.name' 2>/dev/null | head -1)"
+				json_add_string "active_server" "$(jsonfilter -i $AN -e '@.server' 2>/dev/null | head -1)"
+				json_add_string "active_port" "$(jsonfilter -i $AN -e '@.port' 2>/dev/null | head -1)"
+				json_add_string "active_protocol" "$(jsonfilter -i $AN -e '@.protocol' 2>/dev/null | head -1)"
+				json_add_string "active_latency_ms" "$(jsonfilter -i $AN -e '@.latency_ms' 2>/dev/null | head -1)"
+				json_add_int "node_count" "$(jsonfilter -i /etc/orbix/subscriptions.json -e '@.nodes[*].server' 2>/dev/null | wc -l)"
+				json_add_string "node_servers" "$(jsonfilter -i /etc/orbix/subscriptions.json -e '@.nodes[*].server' 2>/dev/null | tr '\n' ' ')"
+				json_add_string "active_updated" "$(jsonfilter -i $AN -e '@.updated' 2>/dev/null | head -1)"
+				json_add_int "singbox_running" "$( (pidof sing-box || pgrep sing-box) >/dev/null 2>&1 && echo 1 || echo 0)"
+				json_add_int "nfqws_running" "$(pgrep -f nfqws >/dev/null 2>&1 && echo 1 || echo 0)"
+				json_add_int "proxy_traffic" "$(nft list chain inet paneltiers marktier 2>/dev/null | grep -c 'meta mark set')"
+				json_dump
+			;;
+
+			tiers_get)
+				json_init
+				json_add_string "status" "ok"
+				if [ -s /etc/orbix/tiers.json ]; then
+					json_add_string "config" "$(cat /etc/orbix/tiers.json)"
+				else
+					json_add_string "config" ""
+				fi
+				json_add_string "nft" "$(cat /usr/share/nftables.d/ruleset-post/48-panel-tiers.nft 2>/dev/null)"
+				json_dump
+			;;
+
 			vless_status)
 				RUNNING=0
 				(pidof sing-box || pgrep sing-box) >/dev/null 2>&1 && RUNNING=1
@@ -999,13 +2174,13 @@ case "$1" in
 				if [ -f "$ACTIVE_CONF" ]; then
 					N_ID=$(jsonfilter -i "$ACTIVE_CONF" -e '@.id' 2>/dev/null)
 					N_NAME=$(jsonfilter -i "$ACTIVE_CONF" -e '@.name' 2>/dev/null)
-					N_SERVER=$(jsonfilter -i "$ACTIVE_CONF" -e '@.server' 2>/dev/null)
-					N_PORT=$(jsonfilter -i "$ACTIVE_CONF" -e '@.port' 2>/dev/null)
-					N_UUID=$(jsonfilter -i "$ACTIVE_CONF" -e '@.uuid' 2>/dev/null)
+					N_SERVER=$(jsonfilter -i "$ACTIVE_CONF" -e '@.server' -e '@.node.server' 2>/dev/null)
+					N_PORT=$(jsonfilter -i "$ACTIVE_CONF" -e '@.port' -e '@.node.port' 2>/dev/null)
+					N_UUID=$(jsonfilter -i "$ACTIVE_CONF" -e '@.uuid' -e '@.node.uuid' 2>/dev/null)
 					N_SEC=$(jsonfilter -i "$ACTIVE_CONF" -e '@.security' 2>/dev/null)
-					N_SNI=$(jsonfilter -i "$ACTIVE_CONF" -e '@.sni' 2>/dev/null)
-					N_PBK=$(jsonfilter -i "$ACTIVE_CONF" -e '@.publicKey' 2>/dev/null)
-					N_SID=$(jsonfilter -i "$ACTIVE_CONF" -e '@.shortId' 2>/dev/null)
+					N_SNI=$(jsonfilter -i "$ACTIVE_CONF" -e '@.sni' -e '@.node.sni' 2>/dev/null)
+					N_PBK=$(jsonfilter -i "$ACTIVE_CONF" -e '@.publicKey' -e '@.node.publicKey' 2>/dev/null)
+					N_SID=$(jsonfilter -i "$ACTIVE_CONF" -e '@.shortId' -e '@.node.shortId' 2>/dev/null)
 					N_TRANS=$(jsonfilter -i "$ACTIVE_CONF" -e '@.transport' 2>/dev/null)
 
 					if [ -n "$N_SERVER" ]; then
@@ -1055,8 +2230,8 @@ case "$1" in
 			;;
 
 			singbox_test_node)
-				RAW_HOST=$(printf "%s\n" "$input" | jsonfilter -e '@.server' 2>/dev/null | tr -d ' \t\r\n')
-				RAW_PORT=$(printf "%s\n" "$input" | jsonfilter -e '@.port' 2>/dev/null | tr -d ' \t\r\n')
+				RAW_HOST=$(printf "%s\n" "$input" | jsonfilter -e '@.server' -e '@.node.server' 2>/dev/null | tr -d ' \t\r\n')
+				RAW_PORT=$(printf "%s\n" "$input" | jsonfilter -e '@.port' -e '@.node.port' 2>/dev/null | tr -d ' \t\r\n')
 
 				if [ -z "$RAW_HOST" ]; then
 					return_error "Server address parameter is required"
@@ -1278,7 +2453,127 @@ case "$1" in
 				json_dump
 			;;
 
-			arm_rollback)
+			pbr_rule_upsert)
+			# Real CRUD for PBR domain policies: writes UCI pbr config, commits,
+			# reloads the pbr service, and reports the actual reload exit code.
+			R_ID=$(printf "%s\n" "$input" | jsonfilter -e '@.id' 2>/dev/null | tr -d ' \t\r\n')
+			R_NAME=$(printf "%s\n" "$input" | jsonfilter -e '@.name' 2>/dev/null)
+			R_ENABLED=$(printf "%s\n" "$input" | jsonfilter -e '@.enabled' 2>/dev/null)
+			R_IFACE=$(printf "%s\n" "$input" | jsonfilter -e '@.interface' 2>/dev/null | tr -d ' \t\r\n')
+			R_SRC=$(printf "%s\n" "$input" | jsonfilter -e '@.src_addr' 2>/dev/null | tr -d ' \t\r\n')
+			R_DEST=$(printf "%s\n" "$input" | jsonfilter -e '@.dest_addr' 2>/dev/null | tr -d ' \t\r\n')
+			R_PROTO=$(printf "%s\n" "$input" | jsonfilter -e '@.proto' 2>/dev/null | tr -d ' \t\r\n')
+
+			# Sanitize section name: allow letters, digits, dash, underscore, dot
+			SEC_NAME=""
+			for tok in "$R_ID" "$R_NAME"; do
+				[ -z "$tok" ] && continue
+				cand=$(printf "%s" "$tok" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9._-')
+				[ "$cand" = "$tok" ] || cand=$(printf "%s" "$cand" | tr ' ' '-' | tr -cd 'a-z0-9.-')
+				if [ -n "$cand" ]; then SEC_NAME="$cand"; break; fi
+			done
+			# @policy[N] style ids are handled as positional references
+			case "$R_ID" in
+				@policy\[[0-9]*\]) SEC_REF="pbr.$R_ID" ;;
+				*) SEC_REF="pbr.${SEC_NAME}" ;;
+			esac
+
+			if [ -z "$SEC_REF" ] || [ "$SEC_REF" = "pbr." ]; then
+				return_error "Rule id or a name suitable for a UCI section is required"
+			fi
+
+			# Validate interface against known outbound targets
+			case "$R_IFACE" in
+				wan|wan6|zapret|singbox|sing-box|awg0|drop|tun*|wg*) : ;;
+				"") return_error "Target interface is required" ;;
+				*) if ! uci -q get "network.$R_IFACE" >/dev/null 2>&1; then
+					return_error "Unknown target interface: $R_IFACE"
+				fi ;;
+			esac
+
+			[ -z "$R_ENABLED" ] && R_ENABLED="1"
+			case "$R_ENABLED" in
+				true|1) EN_VAL="1" ;;
+				*) EN_VAL="0" ;;
+			esac
+
+			# Verify the rule really lands in UCI before reporting success
+			uci -q set "$SEC_REF=policy" || { return_error "uci rejected section name"; }
+			[ -n "$R_NAME" ] && uci -q set "${SEC_REF}.name=${R_NAME}"
+			uci -q set "${SEC_REF}.enabled=${EN_VAL}"
+			uci -q set "${SEC_REF}.interface=${R_IFACE}"
+			if [ -n "$R_SRC" ]; then uci -q set "${SEC_REF}.src_addr=${R_SRC}"; fi
+			if [ -n "$R_DEST" ]; then uci -q set "${SEC_REF}.dest_addr=${R_DEST}"; fi
+			if [ -n "$R_PROTO" ]; then uci -q set "${SEC_REF}.proto=${R_PROTO}"; fi
+
+			if ! uci -q commit pbr; then
+				uci -q revert pbr
+				return_error "UCI commit failed for pbr config - rule NOT saved"
+			fi
+
+			# Confirm it reads back from committed config
+			if ! uci -q show "$SEC_REF" >/dev/null 2>&1; then
+				return_error "Rule committed but cannot be read back - state uncertain, check /etc/config/pbr"
+			fi
+
+			RELOAD_OUT=""
+			RELOAD_CODE=0
+			if [ -x /etc/init.d/pbr ]; then
+				RELOAD_OUT=$(/etc/init.d/pbr reload 2>&1); RELOAD_CODE=$?
+				[ "$RELOAD_CODE" -ne 0 ] && { RELOAD_OUT=$(/etc/init.d/pbr restart 2>&1); RELOAD_CODE=$?; }
+			fi
+
+			json_init
+			json_add_string "status" "ok"
+			json_add_string "section" "${SEC_REF#pbr.}"
+			if [ "$RELOAD_CODE" -eq 0 ]; then APPLIED=1; else APPLIED=0; fi
+			json_add_boolean "applied" "$APPLIED"
+			[ -n "$RELOAD_OUT" ] && json_add_string "reload_output" "$RELOAD_OUT"
+			json_add_int "reload_code" "$RELOAD_CODE"
+			json_dump
+		;;
+
+		pbr_rule_delete)
+			R_ID=$(printf "%s\n" "$input" | jsonfilter -e '@.id' 2>/dev/null | tr -d ' \t\r\n')
+			if [ -z "$R_ID" ]; then
+				return_error "Rule id is required"
+			fi
+			case "$R_ID" in
+				@policy\[[0-9]*\]) SEC_REF="pbr.$R_ID" ;;
+				*)
+					SEC_NAME=$(printf "%s" "$R_ID" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9._-')
+					SEC_REF="pbr.${SEC_NAME}"
+					;;
+			esac
+
+			if ! uci -q show "$SEC_REF" >/dev/null 2>&1; then
+				return_error "Rule '$R_ID' does not exist in /etc/config/pbr"
+			fi
+			if ! uci -q delete "$SEC_REF"; then
+				return_error "uci delete failed for $SEC_REF"
+			fi
+			if ! uci -q commit pbr; then
+				uci -q revert pbr
+				return_error "UCI commit failed after delete - rule NOT removed"
+			fi
+
+			RELOAD_OUT=""
+			RELOAD_CODE=0
+			if [ -x /etc/init.d/pbr ]; then
+				RELOAD_OUT=$(/etc/init.d/pbr reload 2>&1); RELOAD_CODE=$?
+				[ "$RELOAD_CODE" -ne 0 ] && { RELOAD_OUT=$(/etc/init.d/pbr restart 2>&1); RELOAD_CODE=$?; }
+			fi
+
+			json_init
+			json_add_string "status" "ok"
+			if [ "$RELOAD_CODE" -eq 0 ]; then APPLIED=1; else APPLIED=0; fi
+			json_add_boolean "applied" "$APPLIED"
+			json_add_int "reload_code" "$RELOAD_CODE"
+			[ -n "$RELOAD_OUT" ] && json_add_string "reload_output" "$RELOAD_OUT"
+			json_dump
+		;;
+
+		arm_rollback)
 				RAW_TIMEOUT=$(printf "%s\n" "$input" | jsonfilter -e '@.timeout' 2>/dev/null | tr -d ' \t\r\n')
 				TIMEOUT=75
 				case "$RAW_TIMEOUT" in
@@ -1329,7 +2624,7 @@ if [ -f "/tmp/uci_rollback_token" ] && [ "$(cat /tmp/uci_rollback_token 2>/dev/n
 	/etc/init.d/network reload 2>/dev/null
 	/etc/init.d/firewall reload 2>/dev/null
 	/etc/init.d/pbr reload 2>/dev/null
-	/etc/init.d/sing-box restart 2>/dev/null
+		(/etc/init.d/sing-box restart && sleep 1 && /etc/init.d/pbr reload) >/dev/null 2>&1 &
 	/etc/init.d/rpcd restart 2>/dev/null
 	logger -t uci-watchdog "Rollback restoration complete."
 fi
@@ -1384,7 +2679,7 @@ EOF_WD
 					/etc/init.d/network reload 2>/dev/null
 					/etc/init.d/firewall reload 2>/dev/null
 					/etc/init.d/pbr reload 2>/dev/null
-					/etc/init.d/sing-box restart 2>/dev/null
+		(/etc/init.d/sing-box restart && sleep 1 && /etc/init.d/pbr reload) >/dev/null 2>&1 &
 				fi
 
 				json_init
@@ -1468,7 +2763,7 @@ EOF_WD
 				# Validate MAC if provided
 				DEV_MAC=""
 				if [ -n "$RAW_MAC" ]; then
-					DEV_MAC=$(printf "%s" "$RAW_MAC" | grep -iE '^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$' || true)
+					DEV_MAC=$(printf "%s" "$RAW_MAC" | grep -iE '^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$' | tr 'A-F' 'a-f' || true)
 					if [ -z "$DEV_MAC" ]; then
 						return_error "Invalid device MAC address format"
 					fi
@@ -1491,14 +2786,19 @@ EOF_WD
 				uci -q delete pbr."$SEC_NAME"
 				if [ "$DEV_ENABLED" = "true" ] && [ -n "$DEV_IFACE" ] && [ "$DEV_IFACE" != "default" ]; then
 					uci set pbr."$SEC_NAME"=policy
-					uci set pbr."$SEC_NAME".name="Device: ${DEV_NAME} ($DEV_IP)"
-					uci set pbr."$SEC_NAME".src_addr="$DEV_IP"
-					uci set pbr."$SEC_NAME".interface="$DEV_IFACE"
-					uci set pbr."$SEC_NAME".proto="all"
-					uci set pbr."$SEC_NAME".enabled="1"
+					uci set "pbr.$SEC_NAME.name=Device: ${DEV_NAME} (${DEV_IP})"
+					uci set "pbr.$SEC_NAME.src_addr=$DEV_IP"
+					uci set "pbr.$SEC_NAME.interface=$DEV_IFACE"
+					uci set "pbr.$SEC_NAME.proto=all"
+					uci set "pbr.$SEC_NAME.enabled=1"
 				fi
 				uci commit pbr
-				/etc/init.d/pbr reload >/dev/null 2>&1 &
+				RELOAD_OUT=$(/etc/init.d/pbr reload 2>&1)
+				RELOAD_CODE=$?
+				if [ "$RELOAD_CODE" -ne 0 ]; then
+					logger -t orbix "pbr reload failed after device rule change: $RELOAD_OUT"
+					return_error "Rule saved to UCI but PBR service reload failed: ${RELOAD_OUT:-exit $RELOAD_CODE}"
+				fi
 
 				if [ -n "$DEV_MAC" ]; then
 					DHCP_SEC="host_$(echo "$DEV_MAC" | tr -d ':-')"
@@ -1508,7 +2808,8 @@ EOF_WD
 					uci set dhcp."$DHCP_SEC".mac="$DEV_MAC"
 					uci set dhcp."$DHCP_SEC".ip="$DEV_IP"
 					uci commit dhcp
-					/etc/init.d/dnsmasq reload >/dev/null 2>&1 &
+					DNSMASQ_OUT=$(/etc/init.d/dnsmasq reload 2>&1)
+					[ $? -ne 0 ] && logger -t orbix "dnsmasq reload failed after static lease: $DNSMASQ_OUT"
 				fi
 
 				json_init
@@ -1519,17 +2820,19 @@ EOF_WD
 			;;
 
 			singbox_set_outbound)
-				# Save active node configuration in /etc/sing-box/active_node.json
-				printf "%s\n" "$input" > /etc/sing-box/active_node.json 2>/dev/null
+				# Frontend sends the node as a JSON-encoded string under @.node; unwrap it
+				NODE_JSON=$(printf "%s\n" "$input" | jsonfilter -e '@.node' 2>/dev/null)
+				[ -z "$NODE_JSON" ] && NODE_JSON="$input"
+				printf "%s\n" "$NODE_JSON" > /etc/sing-box/active_node.json 2>/dev/null
 
-				RAW_SERVER=$(printf "%s\n" "$input" | jsonfilter -e '@.server' -e '@.node.server' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
-				RAW_PORT=$(printf "%s\n" "$input" | jsonfilter -e '@.port' -e '@.node.port' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
-				RAW_UUID=$(printf "%s\n" "$input" | jsonfilter -e '@.uuid' -e '@.node.uuid' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
-				RAW_FLOW=$(printf "%s\n" "$input" | jsonfilter -e '@.flow' -e '@.node.flow' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
-				RAW_SNI=$(printf "%s\n" "$input" | jsonfilter -e '@.sni' -e '@.node.sni' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
-				RAW_PUBKEY=$(printf "%s\n" "$input" | jsonfilter -e '@.publicKey' -e '@.node.publicKey' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
-				RAW_SHORTID=$(printf "%s\n" "$input" | jsonfilter -e '@.shortId' -e '@.node.shortId' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
-				RAW_FP=$(printf "%s\n" "$input" | jsonfilter -e '@.fingerprint' -e '@.node.fingerprint' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
+				RAW_SERVER=$(jsonfilter -i /etc/sing-box/active_node.json -e '@.server' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
+				RAW_PORT=$(jsonfilter -i /etc/sing-box/active_node.json -e '@.port' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
+				RAW_UUID=$(jsonfilter -i /etc/sing-box/active_node.json -e '@.uuid' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
+				RAW_FLOW=$(jsonfilter -i /etc/sing-box/active_node.json -e '@.flow' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
+				RAW_SNI=$(jsonfilter -i /etc/sing-box/active_node.json -e '@.sni' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
+				RAW_PUBKEY=$(jsonfilter -i /etc/sing-box/active_node.json -e '@.publicKey' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
+				RAW_SHORTID=$(jsonfilter -i /etc/sing-box/active_node.json -e '@.shortId' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
+				RAW_FP=$(jsonfilter -i /etc/sing-box/active_node.json -e '@.fingerprint' 2>/dev/null | head -n1 | tr -d ' \t\r\n')
 
 				# Sanitize fields against configuration injection
 				SERVER=$(printf "%s" "$RAW_SERVER" | grep -E '^([a-zA-Z0-9.-]+)$' || true)
@@ -1549,17 +2852,33 @@ EOF_WD
 				[ -z "$FP" ] && FP="firefox"
 				[ -z "$FLOW" ] && FLOW="xtls-rprx-vision"
 
-				if [ -n "$SERVER" ] && [ -n "$UUID" ]; then
-					generate_singbox_config
+				if [ -z "$SERVER" ] || [ -z "$UUID" ]; then
+					rm -f /etc/sing-box/active_node.json
+					return_error "Node payload is missing a valid server address or UUID - nothing was changed"
 				fi
+
+				generate_singbox_config
+				GEN_CODE=$?
+				case "$GEN_CODE" in
+					0) ;;
+					1) return_error "Generated sing-box config failed validation - previous config kept" ;;
+					*) return_error "Config written but sing-box failed to restart - check the service" ;;
+				esac
 
 				json_init
 				json_add_string "status" "ok"
+				json_add_string "server" "$SERVER"
+				json_add_int "port" "$PORT"
 				json_dump
 			;;
 
 			wifi_reload)
-				/sbin/wifi reload >/dev/null 2>&1 &
+				WIFI_OUT=$(/sbin/wifi reload 2>&1)
+				WIFI_CODE=$?
+				if [ "$WIFI_CODE" -ne 0 ]; then
+					logger -t orbix "wifi reload failed: $WIFI_OUT"
+					return_error "Wi-Fi reload failed: ${WIFI_OUT:-exit $WIFI_CODE}"
+				fi
 				json_init
 				json_add_string "status" "ok"
 				json_dump
@@ -1571,22 +2890,24 @@ EOF_WD
 				[ -z "$KS_SCOPE" ] && KS_SCOPE="vpn_devices"
 
 				mkdir -p /etc/orbix /tmp/hosts /tmp/dnsmasq.d
+				LAN_SUBNET=$(get_lan_subnet)
+				WAN_IFACES=$(get_wan_interfaces)
 
 				if [ "$KS_ENABLED" = "1" ] || [ "$KS_ENABLED" = "true" ]; then
-					echo "{\"enabled\":true,\"scope\":\"$KS_SCOPE\",\"allow_lan\":true,\"updated_at\":$(date +%s)}" > /etc/orbix/killswitch.json
-					LAN_SUBNET=$(get_lan_subnet)
-					WAN_IFACES=$(get_wan_interfaces)
-
-					nft add table inet orbix_protection 2>/dev/null
-					nft 'add chain inet orbix_protection forward { type filter hook forward priority -5; policy accept; }' 2>/dev/null
-					nft flush chain inet orbix_protection forward 2>/dev/null
-					nft add rule inet orbix_protection forward ip daddr "$LAN_SUBNET" accept 2>/dev/null
-					nft add rule inet orbix_protection forward ip saddr "$LAN_SUBNET" ip daddr "$LAN_SUBNET" accept 2>/dev/null
-					nft add rule inet orbix_protection forward ct state established,related accept 2>/dev/null
-					nft 'add rule inet orbix_protection forward oifname { "singbox", "tun0", "awg0", "wg0" } accept' 2>/dev/null
-
+					# Declarative ruleset: atomic apply, kernel errors surface to the UI
+					NFT_TMP=$(mktemp)
+					cat > "$NFT_TMP" <<EOF
+table inet orbix_protection {
+	chain forward {
+		type filter hook forward priority -5; policy accept;
+		ip daddr $LAN_SUBNET accept
+		ip saddr $LAN_SUBNET ip daddr $LAN_SUBNET accept
+		ct state established,related accept
+		oifname { "singbox", "tun0", "awg0", "wg0" } accept
+EOF
+					PROTECTED_COUNT=0
 					if [ "$KS_SCOPE" = "all" ]; then
-						nft "add rule inet orbix_protection forward ip saddr $LAN_SUBNET oifname { $WAN_IFACES } counter drop" 2>/dev/null
+						echo "		ip saddr $LAN_SUBNET oifname { $WAN_IFACES } counter drop" >> "$NFT_TMP"
 					else
 						for SEC in $(uci -q show pbr | grep '=policy' | cut -d'=' -f1); do
 							EN=$(uci -q get "${SEC}.enabled")
@@ -1595,15 +2916,33 @@ EOF_WD
 							if [ "$EN" = "1" ] && [ -n "$SRC" ]; then
 								case "$IFACE" in
 									singbox*|awg*|tun*|wg*)
-										nft "add rule inet orbix_protection forward ip saddr $SRC oifname { $WAN_IFACES } counter drop" 2>/dev/null
+										echo "		ip saddr $SRC oifname { $WAN_IFACES } counter drop" >> "$NFT_TMP"
+										PROTECTED_COUNT=$((PROTECTED_COUNT + 1))
 									;;
 								esac
 							fi
 						done
 					fi
+					echo "	}" >> "$NFT_TMP"
+					echo "}" >> "$NFT_TMP"
+
+					NFT_ERR=$(nft -f "$NFT_TMP" 2>&1)
+					NFT_CODE=$?
+					rm -f "$NFT_TMP"
+					if [ "$NFT_CODE" -ne 0 ]; then
+						logger -t orbix "killswitch nft apply failed: $NFT_ERR"
+						return_error "Kernel rejected kill-switch rules: $NFT_ERR"
+					fi
+
+					echo "{\"enabled\":true,\"scope\":\"$KS_SCOPE\",\"allow_lan\":true,\"lan_subnet\":\"$LAN_SUBNET\",\"protected_devices\":$PROTECTED_COUNT,\"updated_at\":$(date +%s)}" > /etc/orbix/killswitch.json
 				else
-					echo "{\"enabled\":false,\"scope\":\"$KS_SCOPE\",\"allow_lan\":true,\"updated_at\":$(date +%s)}" > /etc/orbix/killswitch.json
-					nft delete table inet orbix_protection 2>/dev/null
+					NFT_ERR=$(nft delete table inet orbix_protection 2>&1)
+					NFT_CODE=$?
+					if [ "$NFT_CODE" -ne 0 ] && ! echo "$NFT_ERR" | grep -qi "does not exist"; then
+						logger -t orbix "killswitch nft teardown failed: $NFT_ERR"
+						return_error "Failed to remove kill-switch rules: $NFT_ERR"
+					fi
+					echo "{\"enabled\":false,\"scope\":\"$KS_SCOPE\",\"allow_lan\":true,\"lan_subnet\":\"$LAN_SUBNET\",\"updated_at\":$(date +%s)}" > /etc/orbix/killswitch.json
 				fi
 
 				IS_EN=0
@@ -1613,6 +2952,7 @@ EOF_WD
 				json_add_string "status" "ok"
 				json_add_boolean "enabled" "$IS_EN"
 				json_add_string "scope" "$KS_SCOPE"
+				json_add_string "lan_subnet" "$LAN_SUBNET"
 				json_dump
 			;;
 
@@ -1667,7 +3007,7 @@ EOF_WD
 
 			policy_apply)
 				mkdir -p /etc/orbix
-				printf "%s\n" "$input" > /etc/orbix/policies.json
+				[ -n "$input" ] && [ "$input" != "{}" ] && printf "%s\n" "$input" > /etc/orbix/policies.json
 
 				# Clean up any legacy sinkhole or hosts files
 				rm -f /tmp/hosts/orbix_policy_blocks /tmp/dnsmasq.d/orbix_policy_blocks.conf
@@ -1676,9 +3016,18 @@ EOF_WD
 
 				# Synchronize Sing-box with active policies and discord proxy
 				generate_singbox_config
+				GEN_CODE=$?
+				case "$GEN_CODE" in
+					0) ;;
+					1) return_error "Policies saved but generated sing-box config failed validation - routing NOT changed" ;;
+					*) return_error "Policies saved but sing-box failed to restart - routing may be stale" ;;
+				esac
+
+				BLOCKED_COUNT=$( [ -f /etc/orbix/policies.json ] && jsonfilter -i /etc/orbix/policies.json -e '@.blocked_domains[*]' 2>/dev/null | wc -l )
 
 				json_init
 				json_add_string "status" "ok"
+				json_add_int "blocked_count" "${BLOCKED_COUNT:-0}"
 				json_dump
 			;;
 
@@ -1697,6 +3046,424 @@ EOF_WD
 					json_add_int "rules_count" 0
 					json_dump
 				fi
+			;;
+			kid_status)
+				kid_ensure
+				kid_status_json
+			;;
+
+			kid_set_master)
+				kid_ensure
+				_KON=$(printf "%s\n" "$input" | jsonfilter -e '@.on' 2>/dev/null)
+				_KON=$(kid_norm_on "$_KON")
+				[ "$_KON" = "bad" ] && return_error "kid: bad on"
+				uci -q set "panel-kid.main.master=$_KON"
+				uci -q commit panel-kid
+				/usr/sbin/panel-kid-apply
+				kid_status_json
+			;;
+
+			kid_set_device)
+				kid_ensure
+				_KMAC=$(printf "%s\n" "$input" | jsonfilter -e '@.mac' 2>/dev/null | tr -d ' \r\n' | tr 'A-F' 'a-f')
+				case "$_KMAC" in ??:??:??:??:??:??) ;; *) return_error "kid: bad mac" ;; esac
+				_KON=$(printf "%s\n" "$input" | jsonfilter -e '@.on' 2>/dev/null)
+				_KON=$(kid_norm_on "$_KON")
+				[ "$_KON" = "bad" ] && return_error "kid: bad on"
+				_KNAME=$(printf "%s\n" "$input" | jsonfilter -e '@.name' 2>/dev/null | tr -d '"'"'"'`$();|&<>\\' | cut -c1-40)
+				_KSEC=""
+				for _ks in $(uci -q show panel-kid 2>/dev/null | sed -n 's/^panel-kid\.\([A-Za-z0-9_-]*\)=kiddev$/\1/p'); do
+					[ "$(uci -q get "panel-kid.$_ks.mac" 2>/dev/null)" = "$_KMAC" ] && _KSEC=$_ks
+				done
+				if [ -z "$_KSEC" ]; then
+					_KSEC="kid_$(printf "%s" "$_KMAC" | tr -d ':')"
+					uci -q set "panel-kid.$_KSEC=kiddev"
+					uci -q set "panel-kid.$_KSEC.mac=$_KMAC"
+				fi
+				# 'on' means internet-for-device; paused is the inverse
+				_KPAUSED=1; [ "$_KON" = "1" ] && _KPAUSED=0
+				uci -q set "panel-kid.$_KSEC.paused=$_KPAUSED"
+				[ -n "$_KNAME" ] && uci -q set "panel-kid.$_KSEC.name=$_KNAME"
+				uci -q commit panel-kid
+				/usr/sbin/panel-kid-apply
+				kid_status_json
+			;;
+
+			kid_set_block)
+				kid_ensure
+				_KCAT=$(printf "%s\n" "$input" | jsonfilter -e '@.category' 2>/dev/null | tr -d ' \r\n')
+				case "$_KCAT" in youtube|games|social|adult) ;; *) return_error "kid: unknown category" ;; esac
+				_KON=$(printf "%s\n" "$input" | jsonfilter -e '@.on' 2>/dev/null)
+				_KON=$(kid_norm_on "$_KON")
+				[ "$_KON" = "bad" ] && return_error "kid: bad on"
+				if [ "$_KON" = "1" ]; then
+					uci -q add_list "panel-kid.main.blocks=$_KCAT" 2>/dev/null || true
+				else
+					uci -q del_list "panel-kid.main.blocks=$_KCAT" 2>/dev/null || true
+				fi
+				uci -q commit panel-kid
+				/usr/sbin/panel-kid-apply
+				kid_status_json
+			;;
+
+			kid_set_bedtime)
+				kid_ensure
+				_KON=$(printf "%s\n" "$input" | jsonfilter -e '@.on' 2>/dev/null)
+				_KON=$(kid_norm_on "$_KON")
+				[ "$_KON" = "bad" ] && return_error "kid: bad on"
+				_KS=$(printf "%s\n" "$input" | jsonfilter -e '@.start' 2>/dev/null | tr -d ' \r\n')
+				_KE=$(printf "%s\n" "$input" | jsonfilter -e '@.end' 2>/dev/null | tr -d ' \r\n')
+				for _kv in "$_KS" "$_KE"; do
+					case "$_kv" in
+					[0-2][0-9]:[0-5][0-9])
+						case "${_kv%%:*}" in 0[0-9]|1[0-9]|2[0-3]) ;; *) return_error "kid: bad time" ;; esac ;;
+					*) return_error "kid: bad time (HH:MM expected)" ;;
+					esac
+				done
+				uci -q set "panel-kid.main.auto_bedtime=$_KON"
+				uci -q set "panel-kid.main.bedtime_start=$_KS"
+				uci -q set "panel-kid.main.bedtime_end=$_KE"
+				uci -q commit panel-kid
+				/usr/sbin/panel-kid-apply
+				kid_status_json
+			;;
+
+			sub_set_source)
+				SRC_URL=$(printf "%s\n" "$input" | jsonfilter -e '@.url' 2>/dev/null | tr -d ' \r\n\t')
+				SRC_KEY=$(printf "%s\n" "$input" | jsonfilter -e '@.api_key' 2>/dev/null | tr -d '\r\n\t')
+				case "$SRC_URL" in
+					http://*|https://*|happ://*) ;;
+					*) return_error "Нужна корректная ссылка подписки (http/https/happ)" ;;
+				esac
+				mkdir -p /etc/orbix
+				printf "%s" "$SRC_URL" > /etc/orbix/sub.url
+				chmod 600 /etc/orbix/sub.url
+				if [ -n "$SRC_KEY" ]; then
+					printf "%s" "$SRC_KEY" > /etc/orbix/sub.key
+					chmod 600 /etc/orbix/sub.key
+				fi
+				json_init
+				json_add_string "status" "ok"
+				json_add_string "message" "ссылка подписки сохранена на роутере"
+				json_dump
+			;;
+
+			sub_refresh)
+				PARSED=0
+				LINKS=""
+				R_URL=$(printf "%s\n" "$input" | jsonfilter -e '@.url' 2>/dev/null | tr -d ' \r\n\t')
+				R_KEY=$(printf "%s\n" "$input" | jsonfilter -e '@.api_key' 2>/dev/null | tr -d '\r\n\t')
+				[ -z "$R_URL" ] && [ -f /etc/orbix/sub.url ] && R_URL=$(cat /etc/orbix/sub.url)
+				[ -z "$R_KEY" ] && [ -f /etc/orbix/sub.key ] && R_KEY=$(cat /etc/orbix/sub.key)
+				if [ -z "$R_URL" ]; then
+					return_error "Ссылка подписки на роутере не сохранена — введите её в разделе «Подписки» и синхронизируйте один раз"
+				fi
+				TARGET_URL="$R_URL"
+				case "$R_URL" in
+					happ://crypt*|happ://add/*)
+						if [ -z "$R_KEY" ]; then
+							return_error "Зашифрованная happ-ссылка: нужен API-ключ (раздел «Подписки»)"
+						fi
+						SAFE_ESC_URL=$(printf "%s" "$R_URL" | sed 's/"/\\"/g')
+						DEC_RES=$(curl -sS --max-time 10 -X POST "https://happy-decoder.cc/api/v1/decrypt" -H "Authorization: Bearer ***" -H "Content-Type: application/json" -d "{\"url\":\"$SAFE_ESC_URL\"}" 2>/dev/null)
+						DEC_URL=$(echo "$DEC_RES" | jsonfilter -e '@.decryptedUrl' 2>/dev/null)
+						[ -n "$DEC_URL" ] && TARGET_URL="$DEC_URL"
+					;;
+				esac
+				BODY=$(curl -sS -L --compressed -A "Happ/4.3.0" -4 --max-time 25 "$TARGET_URL" 2>/dev/null)
+				if [ -z "$BODY" ]; then
+					return_error "Ссылку загрузить не удалось (провайдер недоступен) — старый список сохранён"
+				fi
+				printf "%s" "$BODY" > /tmp/sub-body.raw
+				SNIFF=$(printf "%s" "$BODY" | tr -d ' \t\r\n' | cut -c1)
+				case "$SNIFF" in
+					"["|"{")
+						# sing-box/Xray JSON subscription (client-config array)
+ucode -e '
+							let fs = require("fs");
+							let arr = json(fs.readfile("/tmp/sub-body.raw"));
+							if (!arr) exit;
+							if (type(arr) != "array") arr = [arr];
+							let nodes = []; let skipped = 0; let seen = {};
+							for (let x in arr) {
+								let cands = [];
+								if (x.outbounds) { for (let o in x.outbounds) push(cands, o); }
+								if (x.protocol || x.type) push(cands, x);
+								for (let ob in cands) {
+									let proto = ob.protocol || ob.type || "";
+									if (proto != "vless" && proto != "trojan" && proto != "shadowsocks" && proto != "ss" && proto != "hysteria2") continue;
+									let server = ""; let port = 0; let uuid = ""; let flow = "";
+									if (ob.settings && ob.settings.vnext && length(ob.settings.vnext) > 0) {
+										let v = ob.settings.vnext[0];
+										server = v.address || "";
+										port = int(v.port || 0);
+										if (v.users && length(v.users) > 0) { uuid = v.users[0].id || ""; flow = v.users[0].flow || ""; }
+									} else {
+										server = ob.server || "";
+										port = int(ob.server_port || ob.port || 0);
+										uuid = ob.uuid || "";
+										flow = ob.flow || "";
+									}
+									if (server == "" || port <= 0) { skipped++; continue; }
+						if ((proto == "vless" || proto == "vmess") && uuid == "") { skipped++; continue; }
+									let key = server + ":" + (port + "");
+									if (seen[key]) continue;
+									seen[key] = 1;
+									let ss = ob.streamSettings || {};
+									let sec = ss.security || "none";
+									let rl = ss.realitySettings || null;
+									let tlsx = ss.tlsSettings || null;
+									if (ob.tls && ob.tls.reality) { rl = ob.tls.reality; sec = "reality"; }
+									if (rl) sec = "reality";
+									let pbk = ""; let sid = ""; let sni = ""; let fp = "firefox";
+									if (rl) { pbk = rl.publicKey || rl.public_key || ""; sid = rl.shortId || rl.short_id || ""; sni = rl.serverName || rl.server_name || ""; fp = rl.fingerprint || fp; }
+									if (sni == "" && tlsx) sni = tlsx.serverName || tlsx.server_name || "";
+									if (tlsx && tlsx.fingerprint) fp = tlsx.fingerprint;
+									if (ob.tls && ob.tls.utls && ob.tls.utls.fingerprint) fp = ob.tls.utls.fingerprint;
+									let name = x.remarks || ob.tag || ("node-" + (length(nodes) + 1));
+									let transport = ss.network || ob.network || "tcp";
+									let pw = ob.password || "";
+						let meth = ob.method || "";
+						let ob_tls = ob.tls || {};
+						if (proto != "vless" && proto != "ss" && proto != "shadowsocks") {
+							if (ob_tls.server_name) sni = ob_tls.server_name;
+						}
+						if (proto == "trojan" || proto == "hysteria2") { if (pw == "") { skipped++; continue; } }
+						if (proto == "ss" || proto == "shadowsocks") { if (pw == "" || meth == "") { skipped++; continue; } }
+						push(nodes, { id: "sub-" + (length(nodes) + ""), name: name, server: server, port: port, uuid: uuid, flow: flow, security: sec, sni: sni, fingerprint: fp, publicKey: pbk, shortId: sid, transport: transport, path: ss.path || ob.path || "", protocol: proto, password: pw, method: meth });
+								}
+							}
+							fs.writefile("/tmp/sub-refresh-parsed.json", sprintf("%J", { nodes: nodes, skipped: skipped, bad: 0 }));
+' 2>/dev/null
+						NEW_CNT=$(jsonfilter -i /tmp/sub-refresh-parsed.json -e '@.nodes[*].name' 2>/dev/null | wc -l)
+						if [ "${NEW_CNT:-0}" -lt 1 ]; then
+							rm -f /tmp/sub-body.raw /tmp/sub-refresh-parsed.json
+							return_error "В sing-box JSON-подписке нет поддерживаемых узлов — старый список сохранён"
+						fi
+						rm -f /tmp/sub-body.raw
+						SKIPPED=${SKIPPED:-0}
+						PARSED=1
+						;;
+					*vless://*|*trojan://*|*ss://*|*hy2://*|*hysteria2://*|*vmess://*) LINKS="$BODY" ;;
+					*)
+						DEC=$(printf "%s" "$BODY" | openssl base64 -d -A 2>/dev/null)
+						case "$DEC" in
+							*vless://*|*trojan://*|*ss://*|*hy2://*|*hysteria2://*|*vmess://*) LINKS="$DEC" ;;
+							*)
+								DEC2=$(printf "%s" "$BODY" | openssl enc -d -base64 -A 2>/dev/null)
+								case "$DEC2" in
+									*vless://*|*trojan://*|*ss://*|*hy2://*|*hysteria2://*|*vmess://*) LINKS="$DEC2" ;;
+									*) return_error "В ответе нет известных ссылок (vless/trojan/ss/hysteria2) — старый список сохранён" ;;
+								esac
+							;;
+						esac
+					;;
+				esac
+				if [ "${PARSED:-0}" != "1" ]; then
+					# normalize ss:// links (SIP002 b64 userinfo and legacy all-b64)
+					# to plaintext ss://method:pass@host:port#name — ucode has no b64d
+					LINKS=$(printf '%s\n' "$LINKS" | while IFS= read -r _l; do
+						case "$_l" in
+						ss://*)
+							_rest=${_l#ss://}
+							case "$_rest" in
+							*@*)
+								_head=${_rest%%@*}
+								_tail=${_rest#*@}
+								_info=$(printf '%s' "$_head" | openssl base64 -d -A 2>/dev/null)
+								case "$_info" in
+								*:*) printf 'ss://%s@%s\n' "$_info" "$_tail" ;;
+								*) printf '%s\n' "$_l" ;;
+								esac ;;
+							*)
+								_info=$(printf '%s' "$_rest" | openssl base64 -d -A 2>/dev/null)
+								case "$_info" in
+								*@*) printf 'ss://%s\n' "$_info" ;;
+								*) printf '%s\n' "$_l" ;;
+								esac ;;
+							esac ;;
+						*) printf '%s\n' "$_l" ;;
+						esac
+					done )
+				printf "%s\n" "$LINKS" | ucode -e '
+					let fs = require("fs");
+					let body = fs.readfile("/dev/stdin") || "";
+					let nodes = []; let skipped = 0; let bad = 0; let seen = {};
+					for (let raw in split(body, "\n")) {
+						let line = trim(raw);
+						if (line == "") continue;
+						let proto = "";
+						for (let pl in ["vless://", "trojan://", "hysteria2://", "ss://"]) {
+							if (like(line, pl + "*")) { proto = substr(pl, 0, length(pl) - 3); break; }
+						}
+						if (proto == "") { skipped++; continue; }
+						let rest = substr(line, index(line, "://") + 3);
+						let name = "node"; let main = rest;
+						let h = index(rest, "#");
+						if (h >= 0) { name = substr(rest, h + 1); main = substr(rest, 0, h); }
+						let at = index(main, "@");
+						if (at < 0) { bad++; continue; }
+						let uuid = substr(main, 0, at); let hostport = substr(main, at + 1);
+						let q = index(hostport, "?"); let hp = hostport; let qs = "";
+						if (q >= 0) { hp = substr(hostport, 0, q); qs = substr(hostport, q + 1); }
+						let c = index(hp, ":");
+						if (c < 0) { bad++; continue; }
+						let server = substr(hp, 0, c); let port = int(substr(hp, c + 1));
+						if (port <= 0) { bad++; continue; }
+						let p = {};
+						for (let kv in split(qs, "&")) {
+							let eq = index(kv, "=");
+							if (eq > 0) p[substr(kv, 0, eq)] = urldecode(substr(kv, eq + 1));
+						}
+						let key = server + ":" + port;
+						if (seen[key]) continue; seen[key] = 1;
+						let rec = { id: "sub-" + ((length(nodes) + "")), name: name, server: server, port: port, protocol: proto,
+							sni: p["sni"] || p["peer"] || p["host"] || "", security: "none" };
+						if (proto == "vless") {
+							if (uuid == "") { bad++; continue; }
+							rec.uuid = uuid; rec.flow = p["flow"] || "";
+							rec.security = p["security"] || "none";
+							if (p["pbk"]) rec.security = "reality";
+							rec.fingerprint = p["fp"] || "firefox"; rec.publicKey = p["pbk"] || ""; rec.shortId = p["sid"] || "";
+							rec.transport = p["type"] || "tcp"; rec.path = p["path"] || "";
+						} else if (proto == "trojan" || proto == "hysteria2") {
+							if (uuid == "") { bad++; continue; }
+							rec.password = uuid; rec.security = "tls";
+							rec.fingerprint = p["fp"] || "";
+						} else if (proto == "ss") {
+							let ci = index(uuid, ":");
+							if (ci < 0) { bad++; continue; }
+							rec.method = substr(uuid, 0, ci); rec.password = substr(uuid, ci + 1);
+							if (rec.method == "" || rec.password == "") { bad++; continue; }
+						}
+						push(nodes, rec);
+					}
+					fs.writefile("/tmp/sub-refresh-parsed.json", sprintf("%J", { nodes: nodes, skipped: skipped, bad: bad }));
+				' 2>/dev/null
+				NEW_CNT=$(jsonfilter -i /tmp/sub-refresh-parsed.json -e '@.nodes[*].name' 2>/dev/null | wc -l)
+				fi
+				if [ "${NEW_CNT:-0}" -lt 1 ]; then
+					return_error "Ссылки не распарсились (0 узлов: vless/trojan/ss/hysteria2) — старый список сохранён"
+				fi
+				SKIPPED=$(jsonfilter -i /tmp/sub-refresh-parsed.json -e '@.skipped' 2>/dev/null | head -1)
+				mkdir -p /etc/orbix
+				[ -f /etc/orbix/subscriptions.json ] && cp /etc/orbix/subscriptions.json /root/subscriptions.pre-refresh.json
+				OLD_SEL=$(jsonfilter -i /etc/orbix/subscriptions.json -e '@.metadata.selectionMode' 2>/dev/null | head -1)
+				ucode -e '
+					let fs = require("fs");
+					let parsed = json(fs.readfile("/tmp/sub-refresh-parsed.json"));
+					let old = json(fs.readfile("/etc/orbix/subscriptions.json") || "{}") || {};
+					let out = { nodes: parsed.nodes, metadata: { lastUpdated: time(), selectionMode: old.metadata ? (old.metadata.selectionMode || "manual") : "manual" }, timestamp: time() };
+					fs.writefile("/etc/orbix/subscriptions.json.new", sprintf("%J", out));
+				' 2>/dev/null
+				if [ ! -s /etc/orbix/subscriptions.json.new ]; then
+					return_error "Запись кэша не удалась — старый список сохранён"
+				fi
+				mv /etc/orbix/subscriptions.json.new /etc/orbix/subscriptions.json
+				chmod 600 /etc/orbix/subscriptions.json
+				rm -f /tmp/sub-refresh-parsed.json
+				setsid sh -c 'rm -f /tmp/panel-node-balancer.scan; /usr/sbin/panel-node-balancer force' >/dev/null 2>&1 < /dev/null &
+				json_init
+				json_add_string "status" "ok"
+				json_add_int "nodes" "$NEW_CNT"
+				json_add_int "skipped_other" "${SKIPPED:-0}"
+				json_add_string "message" "список заменён: ${NEW_CNT} узлов; запущен скан за живыми"
+				json_dump
+			;;
+
+			node_balancer_run)
+				setsid sh -c 'rm -f /tmp/panel-node-balancer.scan; /usr/sbin/panel-node-balancer force' >/dev/null 2>&1 < /dev/null &
+				json_init
+				json_add_string "status" "ok"
+				json_add_string "message" "проверка запущена; полный скан до 14 узлов займёт 1-2 минуты"
+				json_dump
+			;;
+
+			node_balancer_status)
+				ST=/tmp/panel-node-balancer.state.json
+				json_init
+				json_add_string "status" "ok"
+				if [ -f "$ST" ]; then
+					B_TS=$(jsonfilter -i "$ST" -e '@.ts' 2>/dev/null | head -1)
+					B_SRV=$(jsonfilter -i "$ST" -e '@.active_server' 2>/dev/null | head -1)
+					B_PORT=$(jsonfilter -i "$ST" -e '@.active_port' 2>/dev/null | head -1)
+					B_SC=$(jsonfilter -i "$ST" -e '@.score' 2>/dev/null | head -1)
+					B_SCAN=$(jsonfilter -i "$ST" -e '@.scanned' 2>/dev/null | head -1)
+					B_BEST=$(jsonfilter -i "$ST" -e '@.best' 2>/dev/null | head -1)
+					B_SW=$(jsonfilter -i "$ST" -e '@.switched' 2>/dev/null | head -1)
+					B_MSG=$(jsonfilter -i "$ST" -e '@.message' 2>/dev/null | head -1)
+					json_add_int "updated" "${B_TS:-0}"
+					json_add_string "active_server" "${B_SRV:-}"
+					json_add_string "active_port" "${B_PORT:-}"
+					json_add_int "score" "${B_SC:-0}"
+					json_add_int "scanned" "${B_SCAN:-0}"
+					json_add_int "best" "${B_BEST:-0}"
+					json_add_boolean "switched" "${B_SW:-0}"
+					json_add_string "message" "${B_MSG:-}"
+				else
+					json_add_string "message" "балансировщик ещё не выполнялся (cron каждые 15 мин)"
+					json_add_int "updated" 0
+					json_add_int "score" 0
+					json_add_int "best" 0
+					json_add_int "scanned" 0
+				fi
+				SUBF=/etc/orbix/subscriptions.json
+				if [ -f "$SUBF" ]; then
+					B_TOTAL=$(jsonfilter -i "$SUBF" -e '@.nodes[*].name' 2>/dev/null | wc -l)
+					json_add_int "sub_nodes" "${B_TOTAL:-0}"
+				else
+					json_add_int "sub_nodes" 0
+				fi
+				json_add_array "log"
+				if [ -f /tmp/panel-node-balancer.log ]; then
+					tail -n 12 /tmp/panel-node-balancer.log 2>/dev/null > /tmp/.nb-logtail
+					while IFS= read -r LB; do
+						json_add_string "" "$LB"
+					done < /tmp/.nb-logtail
+					rm -f /tmp/.nb-logtail
+				fi
+				json_close_array
+				json_dump
+			;;
+
+			run_cmd)
+				# Whitelisted diagnostic runner: file.exec does not exist in stock rpcd,
+				# so panel views (Diagnostics, Software, Backup, DnsRouting) call this.
+				CMD=$(printf "%s\n" "$input" | jsonfilter -e '@.command' 2>/dev/null | tr -d ' \t\r\n')
+				ALLOWED="ping ping6 traceroute traceroute6 nslookup nslookup6 logread dmesg apk nft sysupgrade firstboot date uptime wg awg netstat ip"
+				OK=0
+				for A in $ALLOWED; do
+					[ "$CMD" = "$A" ] && OK=1
+				done
+				if [ "$OK" -ne 1 ]; then
+					return_error "Command '$CMD' is not on the diagnostics whitelist"
+				fi
+
+				ARGS=""
+				BAD=0
+				for P in $(printf "%s\n" "$input" | jsonfilter -e '@.params[*]' 2>/dev/null); do
+					case "$P" in
+						''|*[!A-Za-z0-9._/:=,+-]*) BAD=1 ;;
+					esac
+					[ "$BAD" -eq 1 ] && break
+					ARGS="$ARGS $P"
+				done
+				if [ "$BAD" -eq 1 ]; then
+					return_error "Parameters contain unsupported characters"
+				fi
+
+				ERR_FILE=$(mktemp)
+				OUT=$($CMD $ARGS 2>"$ERR_FILE")
+				CODE=$?
+				ERR=$(cat "$ERR_FILE" 2>/dev/null)
+				rm -f "$ERR_FILE"
+
+				json_init
+				json_add_string "status" "ok"
+				json_add_int "code" "$CODE"
+				json_add_string "stdout" "$OUT"
+				json_add_string "stderr" "$ERR"
+				json_dump
 			;;
 		esac
 	;;

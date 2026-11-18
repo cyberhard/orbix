@@ -249,7 +249,8 @@ else
 					"wifi_reload",
 					"killswitch_set",
 					"sub_save_cache",
-					"policy_apply"
+					"policy_apply",
+					"run_cmd"
 				]
 			}
 		}

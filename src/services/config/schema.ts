@@ -2,7 +2,7 @@
 // Schema Version: 1
 
 import { NetworkPolicy, DomainCategory, DeviceGroup } from "@/services/policy-engine/types";
-import { VlessNode, SubscriptionMetadata, VpnOutboundGroup, KillSwitchConfig, AmneziaWgConfig } from "@/types/ubus";
+import { VlessNode, SubscriptionMetadata, VpnOutboundGroup, KillSwitchConfig } from "@/types/ubus";
 
 export const CURRENT_SCHEMA_VERSION = 1;
 export const ORBIX_FORMAT_IDENTIFIER = "orbix-config";

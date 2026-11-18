@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import { usePolicyStore } from "@/store/policy-store";
 import { useI18nStore } from "@/store/i18n-store";
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,58 +23,28 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Network,
-  Plus,
-  Trash2,
-  Edit2,
-  AlertTriangle,
-  CheckCircle2,
-  ArrowRight,
-  Shield,
-  Zap,
-  Globe,
-  Radio,
-  Save,
-  RefreshCw,
-  Search,
-  Code,
-  Layers,
-  ArrowUpDown,
-} from "lucide-react";
-import { NetworkPolicy, PolicyActionType } from "@/services/policy-engine/types";
+import { Network, Plus, Trash2, AlertTriangle, CheckCircle2, Zap, Globe, Save, Search, Code, Info} from "lucide-react";
+import { PolicyActionType } from "@/services/policy-engine/types";
 
 export const PolicyEngineView: React.FC = () => {
   const { language } = useI18nStore();
   const isRu = language === "ru";
-  const {
-    policies,
-    categories,
-    conflicts,
-    compiledConfig,
-    addPolicy,
-    updatePolicy,
-    deletePolicy,
-    togglePolicy,
-    applyPoliciesToRouter,
-    isApplying,
-  } = usePolicyStore();
+  const {policies, categories, conflicts, compiledConfig, addPolicy, deletePolicy, togglePolicy, applyPoliciesToRouter, isApplying} = usePolicyStore();
 
   const [search, setSearch] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [editingPolicy, setEditingPolicy] = useState<NetworkPolicy | null>(null);
   const [showCompiledModal, setShowCompiledModal] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
   // New policy form state
   const [formName, setFormName] = useState("");
   const [formPriority, setFormPriority] = useState(50);
-  const [formSourceType, setFormSourceType] = useState<"all" | "device" | "group">("all");
-  const [formSourceValue, setFormSourceValue] = useState("");
-  const [formDestType, setFormDestType] = useState<"category" | "custom_domains">("category");
+  const [formSourceType] = useState<"all" | "device" | "group">("all");
+  const [formSourceValue] = useState("");
+  const [formDestType] = useState<"category" | "custom_domains">("category");
   const [formDestValue, setFormDestValue] = useState("category:restricted");
   const [formAction, setFormAction] = useState<PolicyActionType>("vpn_tunnel");
-  const [formTarget, setFormTarget] = useState("singbox");
+  const [formTarget] = useState("singbox");
 
   const showToast = (msg: string) => {
     setFeedback(msg);

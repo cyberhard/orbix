@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ubusClient } from "@/lib/ubus-client";
 import { useI18nStore } from "@/store/i18n-store";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
@@ -21,18 +21,26 @@ import { DeviceRoutingTable } from "@/components/pbr/DeviceRoutingTable";
 
 export const PbrView: React.FC = () => {
   const { t, lang } = useI18nStore();
+  const queryClient = useQueryClient();
   const { data: pbrRulesData } = useQuery({
     queryKey: ["pbr-rules"],
     queryFn: () => ubusClient.getPbrRules(),
   });
 
   const [rules, setRules] = useState<PbrRule[]>(pbrRulesData || []);
+  const [busyRuleId, setBusyRuleId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ text: string; error?: boolean } | null>(null);
 
   React.useEffect(() => {
     if (pbrRulesData) {
       setRules(pbrRulesData);
     }
   }, [pbrRulesData]);
+
+  const showFeedback = (text: string, error = false) => {
+    setFeedback({ text, error });
+    setTimeout(() => setFeedback(null), 6000);
+  };
 
   const [traceTarget, setTraceTarget] = useState("youtube.com");
   const [traceResult, setTraceResult] = useState<{
@@ -48,6 +56,7 @@ export const PbrView: React.FC = () => {
   const [newRuleName, setNewRuleName] = useState("");
   const [newDestAddr, setNewDestAddr] = useState("");
   const [newInterface, setNewInterface] = useState("zapret");
+  const [isAdding, setIsAdding] = useState(false);
 
   const handleTraceRoute = async () => {
     if (!traceTarget.trim()) return;
@@ -62,35 +71,86 @@ export const PbrView: React.FC = () => {
     }
   };
 
-  const handleToggleRule = (id: string) => {
-    setRules((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r))
-    );
+  // Backend returns the committed section id as rule.id - toggling/deleting hits the real config
+  const handleToggleRule = async (rule: PbrRule) => {
+    setBusyRuleId(rule.id);
+    try {
+      await ubusClient.upsertPbrRule({
+        id: rule.id,
+        name: rule.name,
+        enabled: !rule.enabled,
+        interface: rule.interface,
+        src_addr: rule.src_addr,
+        dest_addr: rule.dest_addr,
+        proto: rule.proto,
+      });
+      queryClient.invalidateQueries({ queryKey: ["pbr-rules"] });
+      showFeedback(
+        !rule.enabled
+          ? (lang === "ru" ? "Правило включено и применено (pbr reload)" : "Rule enabled and applied (pbr reload)")
+          : (lang === "ru" ? "Правило отключено и применено (pbr reload)" : "Rule disabled and applied (pbr reload)")
+      );
+    } catch (e: any) {
+      showFeedback((lang === "ru" ? "ОШИБКА: правило НЕ изменено на роутере: " : "ERROR: rule NOT changed on router: ") + (e?.message || String(e)), true);
+    } finally {
+      setBusyRuleId(null);
+    }
   };
 
-  const handleDeleteRule = (id: string) => {
-    setRules((prev) => prev.filter((r) => r.id !== id));
+  const handleDeleteRule = async (rule: PbrRule) => {
+    setBusyRuleId(rule.id);
+    try {
+      await ubusClient.deletePbrRule(rule.id);
+      queryClient.invalidateQueries({ queryKey: ["pbr-rules"] });
+      showFeedback(lang === "ru" ? "Правило удалено с роутера" : "Rule deleted from the router");
+    } catch (e: any) {
+      showFeedback((lang === "ru" ? "ОШИБКА: правило НЕ удалено: " : "ERROR: rule NOT deleted: ") + (e?.message || String(e)), true);
+    } finally {
+      setBusyRuleId(null);
+    }
   };
 
-  const handleAddRule = () => {
+  const handleAddRule = async () => {
     if (!newRuleName.trim() || !newDestAddr.trim()) {
       alert(lang === "ru" ? "Пожалуйста, укажите название правила и целевые домены/IP" : "Please fill in Rule Name and Target Domains/IPs");
       return;
     }
 
-    const newRule: PbrRule = {
-      id: `pbr-${Date.now()}`,
-      name: newRuleName.trim(),
-      enabled: true,
-      dest_addr: newDestAddr.trim(),
-      proto: "tcp udp",
-      interface: newInterface,
-    };
+    // Section-safe id: ASCII slug from the name, fall back to a timestamp
+    const slug = newRuleName.trim().toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 30);
+    const sectionId = slug || `rule-${Date.now()}`;
 
-    setRules((prev) => [newRule, ...prev]);
-    setNewRuleName("");
-    setNewDestAddr("");
-    alert(lang === "ru" ? "Правило добавлено! Сохраните и примените изменения через нижнюю панель UCI." : "Rule added! Check the UCI bar below to Save & Apply.");
+    setIsAdding(true);
+    try {
+      const res = await ubusClient.upsertPbrRule({
+        id: sectionId,
+        name: newRuleName.trim(),
+        enabled: true,
+        interface: newInterface,
+        dest_addr: newDestAddr.trim(),
+        proto: "tcp udp",
+      });
+      setNewRuleName("");
+      setNewDestAddr("");
+      queryClient.invalidateQueries({ queryKey: ["pbr-rules"] });
+      if (res.applied) {
+        showFeedback(lang === "ru" ? "Правило сохранено в /etc/config/pbr и служба pbr перезагружена" : "Rule saved to /etc/config/pbr and pbr service reloaded");
+      } else {
+        showFeedback(
+          (lang === "ru"
+            ? "Правило сохранено в UCI, но служба pbr НЕ перезагрузилась (код " + res.reload_code + "). Проверьте /etc/config/pbr"
+            : "Rule saved to UCI, but the pbr service did NOT reload (code " + res.reload_code + "). Check /etc/config/pbr"),
+          true
+        );
+      }
+    } catch (e: any) {
+      showFeedback((lang === "ru" ? "ОШИБКА: правило НЕ сохранено на роутере: " : "ERROR: rule NOT saved on the router: ") + (e?.message || String(e)), true);
+    } finally {
+      setIsAdding(false);
+    }
   };
 
   const getInterfaceBadge = (iface: string) => {
@@ -193,6 +253,20 @@ export const PbrView: React.FC = () => {
         </CardContent>
       </Card>
 
+      {/* Real write-operation feedback (only shown after an actual router call) */}
+      {feedback && (
+        <div
+          className={`p-3 rounded-lg border text-xs flex items-center justify-between ${
+            feedback.error
+              ? "bg-destructive/10 border-destructive/30 text-destructive"
+              : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+          }`}
+        >
+          <span>{feedback.text}</span>
+          <button onClick={() => setFeedback(null)} className="text-xs opacity-70 hover:opacity-100">✕</button>
+        </div>
+      )}
+
       {/* Per-Device Policy Routing Section */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -257,7 +331,7 @@ export const PbrView: React.FC = () => {
                   <option value="wan">{t.pbr.wanOption}</option>
                   <option value="drop">{t.pbr.dropOption}</option>
                 </select>
-                <Button variant="default" size="sm" onClick={handleAddRule} className="h-8 text-xs px-3">
+                <Button variant="default" size="sm" onClick={handleAddRule} disabled={isAdding} className="h-8 text-xs px-3">
                   <Plus className="h-3.5 w-3.5" />
                 </Button>
               </div>
@@ -274,7 +348,8 @@ export const PbrView: React.FC = () => {
                 <div className="flex items-center gap-3">
                   <Switch
                     checked={rule.enabled}
-                    onCheckedChange={() => handleToggleRule(rule.id)}
+                    disabled={busyRuleId === rule.id}
+                    onCheckedChange={() => handleToggleRule(rule)}
                   />
                   <div>
                     <div className="flex items-center gap-2">
@@ -295,7 +370,8 @@ export const PbrView: React.FC = () => {
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => handleDeleteRule(rule.id)}
+                    disabled={busyRuleId === rule.id}
+                    onClick={() => handleDeleteRule(rule)}
                     className="h-7 w-7 text-muted-foreground hover:text-destructive"
                   >
                     <Trash2 className="h-3.5 w-3.5" />

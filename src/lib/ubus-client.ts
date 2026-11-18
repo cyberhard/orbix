@@ -1,22 +1,4 @@
-import {
-  UbusRpcRequest,
-  UbusRpcResponse,
-  SystemInfo,
-  SystemBoard,
-  NetworkInterfaceStatus,
-  DhcpLease,
-  WirelessDevice,
-  AmneziaWgConfig,
-  ZapretProfile,
-  PbrRule,
-  PodkopConfig,
-  HappSubscriptionData,
-  DeviceRoutingRule,
-  VlessNode,
-  VlessStatusResponse,
-  ZapretStatusResponse,
-  AwgStatusResponse,
-} from "@/types/ubus";
+import { UbusRpcRequest, UbusRpcResponse, SystemInfo, SystemBoard, NetworkInterfaceStatus, DhcpLease, WirelessDevice, AmneziaWgConfig, ZapretProfile, PbrRule, PodkopConfig, HappSubscriptionData, VlessNode, VlessStatusResponse, ZapretStatusResponse, ZapretOptionsResponse, KidStatusResponse, NodeBalancerStatusResponse, AwgStatusResponse } from "@/types/ubus";
 
 class UbusClient {
   private endpoint = "/ubus";
@@ -25,6 +7,7 @@ class UbusClient {
   private defaultTimeoutMs = 15000;
   private loginPromise: Promise<string> | null = null;
   private authExpiredDispatched = false;
+  private lanPrefix: string | null = null;
 
   constructor() {
     if (typeof window !== "undefined") {
@@ -210,6 +193,7 @@ class UbusClient {
     return this.call<SystemBoard>("system", "board");
   }
 
+  /** Same live `system board` telemetry, aliased for view naming. */
   public async getSystemBoard(): Promise<SystemBoard> {
     return this.getBoard();
   }
@@ -218,22 +202,50 @@ class UbusClient {
     return this.call<SystemInfo>("system", "info");
   }
 
+  public async restartInterface(name: string): Promise<{ success: boolean }> {
+    // netifd only accepts well-formed logical interface names; reject anything else
+    if (!/^[A-Za-z0-9_.@-]{1,30}$/.test(name)) {
+      throw new Error(`Invalid interface name: ${name}`);
+    }
+    try {
+      const res = await this.call<number>(`network.interface.${name}`, "restart");
+      // netifd codes: 0=OK 2=INVALID_ARGUMENT 3=VALIDATION_FAILED 4=NOT_FOUND 9=OPERATION_NOT_SUPPORTED
+      if (typeof res === "number" && res !== 0) {
+        throw new Error(
+          (res === 3 || res === 9)
+            ? `netifd refused restart for '${name}' (code ${res}) — this interface or its protocol does not support restart`
+            : `netifd refused restart for '${name}' (code ${res})`
+        );
+      }
+      return { success: true };
+    } catch (err: any) {
+      const msg = String(err?.message || err);
+      if (msg.includes("not found")) {
+        throw new Error(`Interface '${name}' is not managed by netifd`);
+      }
+      if (msg.includes("Permission")) {
+        throw new Error("Router refused: session lacks permission to restart interfaces");
+      }
+      throw err;
+    }
+  }
+
   public async getInterfaces(): Promise<NetworkInterfaceStatus[]> {
     try {
       const [resDump, resDevices] = await Promise.all([
         this.call<{ interface: NetworkInterfaceStatus[] }>("network.interface", "dump"),
-        this.call<Record<string, { statistics?: { rx_bytes: number; tx_bytes: number; rx_packets?: number; tx_packets?: number } }>>("network.device", "status").catch(() => ({} as any)),
+        this.call<Record<string, { statistics?: { rx_bytes: number; tx_bytes: number; rx_packets?: number; tx_packets?: number }; macaddr?: string; speed?: number }>>("network.device", "status").catch(() => ({} as any)),
       ]);
 
       const ifaces = resDump.interface || [];
       if (resDevices) {
         for (const iface of ifaces) {
-          const devName = iface.l3_device || iface.device;
+          const devName = iface.l3_device || iface.interface;
           const devStats = resDevices[devName] || resDevices[iface.interface] as any;
           if (devStats) {
-            if (!iface.data) iface.data = {} as any;
-            if (devStats.macaddr) iface.data.macaddr = devStats.macaddr;
-            if (devStats.speed) iface.data.speed = devStats.speed;
+            iface.data = iface.data || {};
+            iface.data.macaddr = devStats.macaddr;
+            iface.data.speed = devStats.speed;
             if (devStats.statistics) {
               iface.data.statistics = {
                 rx_bytes: devStats.statistics.rx_bytes || 0,
@@ -251,12 +263,40 @@ class UbusClient {
     }
   }
 
+  // Discover the router's LAN subnet prefix (e.g. "192.168.0.") from UCI instead of
+  // assuming 192.168.1.0/24 - wrong assumption hid every client on other subnets.
+  private async getLanPrefix(): Promise<string> {
+    if (this.lanPrefix) return this.lanPrefix;
+    try {
+      const res = await this.call<{ values: Record<string, any> }>("uci", "get", { config: "network" });
+      const sections = res?.values || {};
+      let lanIp = "";
+      for (const [secName, vals] of Object.entries(sections)) {
+        if (vals?.[".type"] === "interface" && (secName === "lan" || vals?.name === "lan") && vals?.ipaddr) {
+          lanIp = String(vals.ipaddr).split("/")[0];
+          break;
+        }
+      }
+      if (lanIp) {
+        const parts = lanIp.split(".");
+        if (parts.length === 4) {
+          this.lanPrefix = `${parts[0]}.${parts[1]}.${parts[2]}.`;
+          return this.lanPrefix;
+        }
+      }
+    } catch {}
+    this.lanPrefix = "192.168.1.";
+    return this.lanPrefix;
+  }
+
   public async getDhcpLeases(): Promise<DhcpLease[]> {
     try {
-      const [resLeases, resHints] = await Promise.all([
+      const [resLeases, resHints, lanPrefix] = await Promise.all([
         this.call<any>("luci-rpc", "getDHCPLeases").catch(() => ({})),
-        this.call<Record<string, { name?: string; ipaddrs?: string[] }>>("luci-rpc", "getHostHints").catch(() => ({})),
+        this.call<Record<string, { name?: string; ipaddrs?: string[] }>>("luci-rpc", "getHostHints").catch(() => ({} as Record<string, { name?: string; ipaddrs?: string[] }>)),
+        this.getLanPrefix(),
       ]);
+      const routerIp = `${lanPrefix}1`;
 
       const leases: DhcpLease[] = [];
       let leaseList = resLeases.dhcp_leases || resLeases.leases || [];
@@ -305,7 +345,7 @@ class UbusClient {
       if (resHints && Object.keys(resHints).length > 0) {
         for (const [macUpper, hint] of Object.entries(resHints)) {
           const ip = hint.ipaddrs?.[0];
-          if (ip && !seenIps.has(ip) && ip.startsWith("192.168.1.") && ip !== "192.168.1.1") {
+          if (ip && !seenIps.has(ip) && ip.startsWith(lanPrefix) && ip !== routerIp) {
             seenIps.add(ip);
             leases.push({
               expires: 43200,
@@ -325,7 +365,7 @@ class UbusClient {
               const parts = line.split(/\s+/);
               const ip = parts[0];
               const mac = (parts[3] || "").toUpperCase();
-              if (ip && mac && mac !== "00:00:00:00:00:00" && !seenIps.has(ip) && ip.startsWith("192.168.1.") && ip !== "192.168.1.1") {
+              if (ip && mac && mac !== "00:00:00:00:00:00" && !seenIps.has(ip) && ip.startsWith(lanPrefix) && ip !== routerIp) {
                 seenIps.add(ip);
                 leases.push({
                   expires: 43200,
@@ -419,11 +459,13 @@ class UbusClient {
   public async reloadWifi(): Promise<void> {
     try {
       await this.call("circumvention", "wifi_reload", {});
-    } catch {
+    } catch (firstErr) {
       try {
         await this.call("network.wireless", "reconf", { device: "radio0" });
         await this.call("network.wireless", "reconf", { device: "radio1" });
-      } catch {}
+      } catch {
+        throw firstErr;
+      }
     }
   }
 
@@ -540,6 +582,7 @@ class UbusClient {
       return {
         running: Boolean(res.running),
         enabled: Boolean(res.enabled),
+        installed: res.installed === undefined ? undefined : Boolean(res.installed),
         fwtype: res.fwtype || "nftables",
         mode_filter: res.mode_filter,
         ports_tcp: res.ports_tcp,
@@ -555,9 +598,276 @@ class UbusClient {
     return this.call<PodkopConfig>("circumvention", "podkop_status", {});
   }
 
+  public async podkopUpdate(): Promise<{ status: string; exit_code?: number; output?: string; message?: string }> {
+    return this.call("circumvention", "podkop_update", {});
+  }
+
+  public async testZapretStrategy(domain: string): Promise<{
+    status: string;
+    verified: boolean;
+    target: string;
+    http_code?: number;
+    connect_time_ms?: number;
+    tls_handshake_ms?: number;
+    total_time_ms?: number;
+    message?: string;
+  }> {
+    return this.call("circumvention", "zapret_test_strategy", { domain });
+  }
+
+  // ---------- zapret live configuration (real UCI read/write + restart on the router) ----------
+  public async getZapretOptions(): Promise<ZapretOptionsResponse> {
+    const res = await this.call<any>("circumvention", "zapret_get_options", {});
+    if (res && res.status === "error") throw new Error(res.message || "zapret_get_options failed");
+    return {
+      installed: Boolean(res.installed),
+      running: Boolean(res.running),
+      nfqws_enable: Boolean(res.nfqws_enable),
+      ports_tcp: res.ports_tcp || "",
+      ports_udp: res.ports_udp || "",
+      mode_filter: res.mode_filter || "hostlist",
+      run_on_boot: res.run_on_boot || "0",
+      fwtype: res.fwtype || "",
+      nfqws_opt: res.nfqws_opt || "",
+      list_files: res.list_files || [],
+      backups: res.backups || [],
+    };
+  }
+
+  public async setZapretOptions(opts: {
+    nfqws_enable?: string;
+    ports_tcp?: string;
+    ports_udp?: string;
+    mode_filter?: string;
+    run_on_boot?: string;
+    nfqws_opt?: string;
+    restart?: number;
+  }): Promise<{ status: string; committed?: boolean; verified?: boolean; restart_started?: boolean; message?: string }> {
+    const res = await this.call<any>("circumvention", "zapret_set_options", opts);
+    if (res && res.status === "error") throw new Error(res.message || "zapret_set_options failed");
+    return res;
+  }
+
+  // Chunked upload so big domain lists pass under the ubus message-size limit.
+  public async uploadZapretList(name: string, content: string): Promise<{ name: string; bytes: number }> {
+    const bytes = new TextEncoder().encode(content);
+    const CHUNK = 16384;
+    let last = false;
+    let result: { name: string; bytes: number } | null = null;
+    for (let off = 0; off < bytes.length || off === 0; off += CHUNK) {
+      const slice = bytes.subarray(off, off + CHUNK);
+      let bin = "";
+      for (let i = 0; i < slice.length; i++) bin += String.fromCharCode(slice[i]);
+      const b64 = btoa(bin);
+      last = off + CHUNK >= bytes.length;
+      const res = await this.call<any>("circumvention", "zapret_import_chunk", { file: name, b64, last: last ? 1 : 0 });
+      if (res && res.status === "error") throw new Error(res.message || "zapret_import_chunk failed");
+      result = { name: res.name, bytes: res.bytes };
+      if (last) break;
+    }
+    return result as { name: string; bytes: number };
+  }
+
+  public async importZapretProfile(payload: {
+    name: string;
+    nfqws_opt: string;
+    ports_tcp?: string;
+    ports_udp?: string;
+    mode: "replace" | "append";
+    files?: string[];
+    restart?: number;
+  }): Promise<{ status: string; written?: string[]; committed?: boolean; restart_started?: boolean; message?: string }> {
+    const res = await this.call<any>("circumvention", "zapret_import_profile", payload);
+    if (res && res.status === "error") throw new Error(res.message || "zapret_import_profile failed");
+    return res;
+  }
+
+  public async restoreZapretBackup(file: string): Promise<{ status: string; restored?: boolean; message?: string }> {
+    const res = await this.call<any>("circumvention", "zapret_restore_backup", { file });
+    if (res && res.status === "error") throw new Error(res.message || "zapret_restore_backup failed");
+    return res;
+  }
+
+  // --- fw4 flow offloading fix for zapret (ported from Zapret-Manager) ---
+  public async getZapretFlowoff(): Promise<{
+    status: string;
+    zapret_installed: number;
+    fw4_tpl: number;
+    offload: "none" | "sw" | "hw";
+    fix_applied: number;
+    fix_needed: number;
+  }> {
+    return this.call("circumvention", "zapret_flowoff_status", {});
+  }
+
+  public async setZapretFlowoffFix(enable: boolean): Promise<{ status: string; fix_applied: number; offload: string; message: string }> {
+    const res = await this.call<any>("circumvention", "zapret_flowoff_fix", { enable });
+    if (res && res.status === "error") throw new Error(res.message || "zapret_flowoff_fix failed");
+    return res;
+  }
+
+  // --- NFQWS ports sync with the active strategy ---
+  public async syncZapretPorts(): Promise<{
+    status: string;
+    changed: number;
+    ports_tcp: string;
+    ports_udp: string;
+    required_tcp: string;
+    required_udp: string;
+    message: string;
+  }> {
+    const res = await this.call<any>("circumvention", "zapret_ports_sync", {});
+    if (res && res.status === "error") throw new Error(res.message || "zapret_ports_sync failed");
+    return res;
+  }
+
+  // --- strategy auto-test loop (ported from Zapret-Manager test module) ---
+  public async startZapretAutoTest(applyBest: boolean): Promise<{ status: string; started: number; message: string }> {
+    const res = await this.call<any>("circumvention", "zapret_auto_test", { apply_best: applyBest });
+    if (res && res.status === "error") throw new Error(res.message || "zapret_auto_test failed");
+    return res;
+  }
+
+  public async getZapretAutoStatus(): Promise<{
+    status: string;
+    running: number;
+    recovered: number;
+    cur: string;
+    idx: number;
+    total: number;
+    best: string;
+    results: { name: string; ok: number; total: number; ts: string }[];
+    log: string;
+  }> {
+    return this.call("circumvention", "zapret_auto_status", {});
+  }
+
+  public async stopZapretAutoTest(): Promise<{ status: string; message: string }> {
+    const res = await this.call<any>("circumvention", "zaptest_stop", {});
+    if (res && res.status === "error") throw new Error(res.message || "zaptest_stop failed");
+    return res;
+  }
+
+  // --- services watchdog (cron sweep, Zapret-Manager zm_watch pattern) ---
+  public async getWatchdogStatus(): Promise<{
+    status: string;
+    installed: number;
+    enabled: number;
+    spec: string;
+    state: string;
+    log: string;
+  }> {
+    return this.call("circumvention", "watchdog_status", {});
+  }
+
+  public async setWatchdog(opts: { enable?: boolean; interval_min?: number; run_now?: boolean }): Promise<{
+    status: string;
+    enabled: number;
+    spec: string;
+    message?: string;
+  }> {
+    const res = await this.call<any>("circumvention", "watchdog_set", opts);
+    if (res && res.status === "error") throw new Error(res.message || "watchdog_set failed");
+    return res;
+  }
+
+  // --- Unified three-tier routing engine (direct / zapret / proxy) ---
+  public async getTiersStatus(): Promise<{
+    status: string;
+    nft_installed: number;
+    nft_live: number;
+    routes_installed: number;
+    dns_hook: number;
+    cron: number;
+    config_version: string;
+    active_name: string;
+    active_server: string;
+    active_port: string;
+    active_protocol: string;
+    active_latency_ms: string;
+    active_updated: string;
+    node_count: number;
+    node_servers: string;
+    singbox_running: number;
+    nfqws_running: number;
+  }> {
+    return this.call("circumvention", "tiers_status", {});
+  }
+
+  public async getTiersConfig(): Promise<{ status: string; config: string; nft: string }> {
+    return this.call("circumvention", "tiers_get", {});
+  }
+
+  private async tierStage(part: string, payload: string): Promise<void> {
+    const bytes = new TextEncoder().encode(payload);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 1) bin += String.fromCharCode(bytes[i]);
+    const b64 = btoa(bin);
+    const size = 6000;
+    let seq = 0;
+    for (let i = 0; i < b64.length; i += size) {
+      const res = await this.call<any>("circumvention", "tiers_stage", {
+        part,
+        seq,
+        chunk: b64.slice(i, i + size),
+        final: i + size >= b64.length ? 1 : 0,
+      });
+      if (res && res.status === "error") throw new Error(res.message || `tiers_stage ${part} failed`);
+      seq += 1;
+    }
+  }
+
+  /** Stage all artifacts then commit atomically on router (nft -c / sh -n validated there).
+   * tierConfigJson = TierConfig itself; router regenerates /etc/sing-box/config.json from it. */
+  public async tiersDeploy(artifacts: { nft: string; dnsmasq: string; iproute: string; tierConfigJson: string }): Promise<{
+    status: string; nft_applied: number; route_applied: number; dns_hook_applied: number; singbox_applied: number; backup: string; message: string;
+  }> {
+    await this.tierStage("nft", artifacts.nft);
+    await this.tierStage("dnsmasq", artifacts.dnsmasq);
+    await this.tierStage("routes", artifacts.iproute);
+    await this.tierStage("config", artifacts.tierConfigJson);
+    const res = await this.call<any>("circumvention", "tiers_commit", {});
+    if (res && res.status === "error") throw new Error(res.message || "tiers_commit failed");
+    return res;
+  }
+
+  public async tiersDisable(): Promise<{ status: string; message: string }> {
+    const res = await this.call<any>("circumvention", "tiers_disable", {});
+    if (res && res.status === "error") throw new Error(res.message || "tiers_disable failed");
+    return res;
+  }
+
+  public async awgGenkey(): Promise<{ status: string; private_key: string; public_key: string }> {
+    return this.call("circumvention", "awg_genkey", {});
+  }
+
   public async getPbrRules(): Promise<PbrRule[]> {
     const res = await this.call<any>("circumvention", "pbr_status", {});
     return res.rules || (Array.isArray(res) ? res : []);
+  }
+
+  /** Live PBR state as reported by rpcd `circumvention pbr_status`. */
+  public async getPbrStatus(): Promise<{ enabled: boolean; policies: PbrRule[]; rules: PbrRule[] }> {
+    const res = await this.call<any>("circumvention", "pbr_status", {});
+    const rules: PbrRule[] = res?.rules || (Array.isArray(res) ? res : []);
+    return { enabled: Boolean(res?.enabled), rules, policies: rules };
+  }
+
+  // Real domain-policy CRUD: writes /etc/config/pbr, commits and reloads the service server-side
+  public async upsertPbrRule(rule: {
+    id?: string;
+    name: string;
+    enabled?: boolean;
+    interface: string;
+    src_addr?: string;
+    dest_addr?: string;
+    proto?: string;
+  }): Promise<{ status: string; section: string; applied: boolean; reload_code: number; reload_output?: string }> {
+    return this.call("circumvention", "pbr_rule_upsert", rule);
+  }
+
+  public async deletePbrRule(id: string): Promise<{ status: string; applied: boolean; reload_code: number }> {
+    return this.call("circumvention", "pbr_rule_delete", { id });
   }
 
   public async getVlessNodes(): Promise<VlessNode[]> {
@@ -642,11 +952,12 @@ class UbusClient {
   }
 
   // File & Process Execution APIs
+  // NOTE: stock rpcd's `file` object has NO exec method; use our whitelisted runner.
   public async exec(
     command: string,
     params: string[] = []
   ): Promise<{ code: number; stdout?: string; stderr?: string }> {
-    return this.call<{ code: number; stdout?: string; stderr?: string }>("file", "exec", {
+    return this.call<{ code: number; stdout?: string; stderr?: string }>("circumvention", "run_cmd", {
       command,
       params,
     });
@@ -740,6 +1051,45 @@ class UbusClient {
     updated_at: number;
   }> {
     return this.call("circumvention", "policy_status", {});
+  }
+
+  // Kid (child-friendly) controls — real enforcement on router (nft + dnsmasq)
+  public async getKidStatus(): Promise<KidStatusResponse> {
+    return this.call<KidStatusResponse>("circumvention", "kid_status", {});
+  }
+
+  public async kidSetMaster(on: boolean): Promise<KidStatusResponse> {
+    return this.call<KidStatusResponse>("circumvention", "kid_set_master", { on: on ? 1 : 0 });
+  }
+
+  public async kidSetDevice(mac: string, on: boolean, name?: string): Promise<KidStatusResponse> {
+    return this.call<KidStatusResponse>("circumvention", "kid_set_device", { mac, on: on ? 1 : 0, name: name || "" });
+  }
+
+  public async kidSetBlock(category: string, on: boolean): Promise<KidStatusResponse> {
+    return this.call<KidStatusResponse>("circumvention", "kid_set_block", { category, on: on ? 1 : 0 });
+  }
+
+  public async kidSetBedtime(on: boolean, start: string, end: string): Promise<KidStatusResponse> {
+    return this.call<KidStatusResponse>("circumvention", "kid_set_bedtime", { on: on ? 1 : 0, start, end });
+  }
+
+  // Subscription refresh on router (parses provider link, replaces node list atomically)
+  public async subRefresh(): Promise<{ status: string; nodes?: number; skipped_non_vless?: number; message?: string }> {
+    return this.call<{ status: string; nodes?: number; skipped_non_vless?: number; message?: string }>("circumvention", "sub_refresh", {});
+  }
+
+  public async subSetSource(url: string, apiKey?: string): Promise<{ status: string }> {
+    return this.call<{ status: string }>("circumvention", "sub_set_source", { url, api_key: apiKey || "" });
+  }
+
+  // Node balancer — real throughput probes + auto-failover on router (panel-node-balancer)
+  public async getNodeBalancerStatus(): Promise<NodeBalancerStatusResponse> {
+    return this.call<NodeBalancerStatusResponse>("circumvention", "node_balancer_status", {});
+  }
+
+  public async nodeBalancerRun(): Promise<{ status: string; message?: string }> {
+    return this.call<{ status: string; message?: string }>("circumvention", "node_balancer_run", {});
   }
 
 }

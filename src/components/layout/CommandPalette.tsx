@@ -12,7 +12,6 @@ import {
   Cpu,
   Layers,
   Search,
-  Zap,
   Globe,
   Sliders,
   Terminal,
@@ -53,7 +52,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ onSelectRoute, i
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
-        setOpen((prev) => !prev);
+        if (isOpen === undefined) setInternalOpen((p) => !p);
+        else if (onClose) onClose();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -76,7 +76,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ onSelectRoute, i
     { id: "vpn-awg", title: `AmneziaWG (AWG) - ${t.nav.vpnManager}`, category: t.nav.circumventionVpn, icon: <Shield className="h-4 w-4" />, action: () => onSelectRoute("vpn") },
     { id: "subscriptions", title: t.nav.subscriptions, category: t.nav.circumventionVpn, icon: <Globe className="h-4 w-4" />, action: () => onSelectRoute("subscriptions") },
     { id: "vpn-vless", title: `VLESS / Sing-box / Xray Reality - ${t.nav.vpnManager}`, category: t.nav.circumventionVpn, icon: <Globe className="h-4 w-4" />, action: () => onSelectRoute("vpn") },
-    { id: "vpn-hysteria", title: `Hysteria 2 - ${t.nav.vpnManager}`, category: t.nav.circumventionVpn, icon: <Zap className="h-4 w-4" />, action: () => onSelectRoute("vpn") },
     { id: "zapret", title: t.nav.zapretBuilder, category: t.nav.circumventionVpn, icon: <Sliders className="h-4 w-4" />, action: () => onSelectRoute("zapret") },
     { id: "podkop", title: t.nav.podkopServices, category: t.nav.circumventionVpn, icon: <Layers className="h-4 w-4" />, action: () => onSelectRoute("podkop") },
     { id: "pbr", title: t.nav.policyRouting, category: t.nav.circumventionVpn, icon: <Network className="h-4 w-4" />, action: () => onSelectRoute("pbr") },

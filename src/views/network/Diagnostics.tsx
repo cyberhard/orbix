@@ -1,9 +1,9 @@
 import React, { useState } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Terminal, Play, Loader2, Sparkles, AlertCircle } from "lucide-react";
+import { Play, Loader2, Sparkles } from "lucide-react";
 import { ubusClient } from "@/lib/ubus-client";
 import { useI18nStore } from "@/store/i18n-store";
 
@@ -82,7 +82,7 @@ export const Diagnostics: React.FC = () => {
         </div>
         <div className="flex items-center gap-1.5">
           <Badge variant="outline" className="text-[10px] font-mono text-zinc-400">
-            host: 192.168.1.1
+            host: {window.location.hostname || "this router"}
           </Badge>
           {exitCode !== null && (
             <Badge

@@ -9,22 +9,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/com
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Video,
-  MessageSquare,
-  Globe,
-  Building2,
-  ShieldAlert,
-  Sparkles,
-  Lock,
-  CheckCircle2,
-  Save,
-  RefreshCw,
-  Zap,
-  ArrowRight,
-  Shield,
-  HelpCircle,
-} from "lucide-react";
+import { Video, MessageSquare, Globe, Building2, Sparkles, Lock, CheckCircle2, Save } from "lucide-react";
 
 export const SimplePolicyManager: React.FC = () => {
   const { language } = useI18nStore();
@@ -51,7 +36,7 @@ export const SimplePolicyManager: React.FC = () => {
 
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  const showToast = (msg: string) => {
+  const showToast = (msg: string, _tone?: string) => {
     setFeedback(msg);
     setTimeout(() => setFeedback(null), 3500);
   };
@@ -61,7 +46,7 @@ export const SimplePolicyManager: React.FC = () => {
   const youtubePolicy = getPolicy("sys-policy-youtube-zapret");
   const discordPolicy = getPolicy("sys-policy-discord-zapret");
   const russiaPolicy = getPolicy("sys-policy-russia-direct");
-  const bankingPolicy = getPolicy("sys-policy-banking-direct");
+  getPolicy("sys-policy-banking-direct");
   const aiPolicy = getPolicy("sys-policy-ai-smartdns");
   const geoblockedPolicy = getPolicy("sys-policy-geoblocked-vpn");
 
@@ -75,7 +60,7 @@ export const SimplePolicyManager: React.FC = () => {
     if (res.success) {
       showToast(isRu ? "Все правила успешно применены на роутере!" : "All policies applied to router!");
     } else {
-      showToast(res.message, "error" as any);
+      showToast(res.message, "error");
     }
   };
 
@@ -190,7 +175,6 @@ export const SimplePolicyManager: React.FC = () => {
               <Badge variant="outline" className="text-[10px] font-mono text-zinc-300 bg-zinc-900 border-zinc-800">
                 Zapret multisplit
               </Badge>
-              <span className="text-[10px] text-zinc-500 font-mono">Voice WebRTC active</span>
             </div>
           </CardContent>
         </Card>
@@ -228,7 +212,6 @@ export const SimplePolicyManager: React.FC = () => {
               <Badge variant="outline" className="text-[10px] font-mono text-zinc-300 bg-zinc-900 border-zinc-800">
                 Direct WAN (Bypass)
               </Badge>
-              <span className="text-[10px] text-zinc-500 font-mono">Ministry of Digital CA OK</span>
             </div>
           </CardContent>
         </Card>
@@ -267,7 +250,7 @@ export const SimplePolicyManager: React.FC = () => {
                 Smart DNS / dns-ai.ru
               </Badge>
               <span className="text-[10px] text-zinc-500 font-mono">
-                {isRu ? "Активен" : "Active"}
+                {aiPolicy?.enabled ? (isRu ? "политика включена (нужно «Применить»)" : "policy on (needs Apply)") : isRu ? "политика выключена" : "policy off"}
               </span>
             </div>
           </CardContent>
@@ -332,16 +315,20 @@ export const SimplePolicyManager: React.FC = () => {
               </div>
               <Switch
                 checked={killSwitch.enabled}
-                onCheckedChange={(val) => {
-                  toggleKillSwitch(val);
+                onCheckedChange={async (val) => {
+                  const ok = await toggleKillSwitch(val);
                   showToast(
-                    isRu
-                      ? val
-                        ? "Kill Switch активирован!"
-                        : "Kill Switch отключен"
-                      : val
-                      ? "Kill Switch enabled!"
-                      : "Kill Switch disabled"
+                    ok
+                      ? isRu
+                        ? val
+                          ? "Kill Switch активирован на роутере!"
+                          : "Kill Switch отключен на роутере"
+                        : val
+                        ? "Kill Switch enabled on the router!"
+                        : "Kill Switch disabled on the router"
+                      : isRu
+                      ? "ОШИБКА: kill switch не применён на роутере — состояние не изменено"
+                      : "ERROR: kill switch was NOT applied on the router - state unchanged"
                   );
                 }}
               />

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Shield, Plus, ArrowRight, RefreshCw, Loader2, Save, Trash2, Power } from "lucide-react";
+import { Shield, Plus, ArrowRight, RefreshCw, Loader2, Save } from "lucide-react";
 import { ubusClient } from "@/lib/ubus-client";
 import { useI18nStore } from "@/store/i18n-store";
 

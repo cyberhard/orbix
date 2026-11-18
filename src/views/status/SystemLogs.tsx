@@ -13,26 +13,20 @@ export const SystemLogs: React.FC = () => {
   const [filter, setFilter] = useState("");
   const [logType, setLogType] = useState<"system" | "dmesg">("system");
 
-  const { data, refetch, isFetching } = useQuery({
+  const { data, refetch, isFetching, isError, error } = useQuery({
     queryKey: ["system-log", logType],
     queryFn: async () => {
-      try {
-        const res = await ubusClient.getLog(150);
-        return res.log || [];
-      } catch {
-        return [
-          "daemon.notice netifd: Network device 'wan' link is up",
-          "daemon.info dnsmasq[1234]: compile time options: IPv6 GNU-getopt no-DBus UBus",
-          "daemon.info dnsmasq[1234]: reading /tmp/resolv.conf.auto",
-          "daemon.info dnsmasq[1234]: using nameserver 8.8.8.8#53",
-          "daemon.info pbr: pbr 1.2.2-r20 monitoring interface wan...",
-          "daemon.info sing-box[5678]: sing-box 1.13.21 started with inbound tproxy :10808",
-          "user.notice zapret: nfqws started on wan, tracking 8 hostlists",
-          "daemon.notice dropbear[1122]: Auth succeeded for user 'root' from 192.168.1.100:54210",
-        ];
+      if (logType === "dmesg") {
+        const execRes = await ubusClient.exec("dmesg", []);
+        const out = (execRes.stdout || "").trim();
+        if (!out) throw new Error(execRes.stderr || "dmesg returned no output");
+        return out.split("\n");
       }
+      const res = await ubusClient.getLog(150);
+      return res.log || [];
     },
     refetchInterval: 5000,
+    retry: 1,
   });
 
   const lines = data || [];
@@ -117,7 +111,12 @@ export const SystemLogs: React.FC = () => {
         </CardHeader>
         <CardContent className="p-0">
           <div className="h-[480px] w-full overflow-y-auto bg-black/60 font-mono text-[11px] p-4 text-emerald-400 space-y-1">
-            {filtered.length === 0 ? (
+            {isError ? (
+              <div className="text-red-400 text-center py-12 space-y-1">
+                <div>{lang === "ru" ? "Не удалось прочитать журнал роутера" : "Could not read router logs"}</div>
+                <div className="text-[10px] text-muted-foreground break-all">{String((error as any)?.message || error)}</div>
+              </div>
+            ) : filtered.length === 0 ? (
               <div className="text-muted-foreground text-center py-12">{t.logs.noLogs}</div>
             ) : (
               filtered.map((line, idx) => {

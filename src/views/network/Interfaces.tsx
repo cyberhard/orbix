@@ -1,16 +1,19 @@
-import React from "react";
-import { useQuery } from "@tanstack/react-query";
+import React, { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ubusClient } from "@/lib/ubus-client";
 import { useI18nStore } from "@/store/i18n-store";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Network, Plus, ArrowDownLeft, ArrowUpRight, Settings2 } from "lucide-react";
+import { Network, ArrowDownLeft, ArrowUpRight, RotateCw } from "lucide-react";
 import { formatBytes } from "@/lib/utils";
 
 export const Interfaces: React.FC = () => {
-  const { lang, t } = useI18nStore();
+  const {lang} = useI18nStore();
   const isRu = lang === "ru";
+  const queryClient = useQueryClient();
+  const [busyIface, setBusyIface] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ text: string; error?: boolean } | null>(null);
 
   const { data: ifaces } = useQuery({
     queryKey: ["network-interfaces"],
@@ -18,24 +21,58 @@ export const Interfaces: React.FC = () => {
     refetchInterval: 5000,
   });
 
+  const handleRestart = async (name: string) => {
+    const warn = isRu
+      ? `Перезапустить интерфейс «${name}»? На несколько секунд соединение через него прервётся. Продолжить?`
+      : `Restart interface “${name}”? Connectivity through it will drop for a few seconds. Continue?`;
+    if (!confirm(warn)) return;
+    setBusyIface(name);
+    setFeedback(null);
+    try {
+      await ubusClient.restartInterface(name);
+      setFeedback({
+        text: isRu
+          ? `Интерфейс ${name} перезапущен роутером (netifd).`
+          : `Interface ${name} restarted by the router (netifd).`,
+      });
+    } catch (err: any) {
+      setFeedback({ text: err.message || String(err), error: true });
+    } finally {
+      setBusyIface(null);
+      queryClient.invalidateQueries({ queryKey: ["network-interfaces"] });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-base font-bold text-foreground">
-            {isRu ? "Сетевые интерфейсы и VLAN" : "Network Interfaces & VLANs"}
+            {isRu ? "Сетевые интерфейсы" : "Network Interfaces"}
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
             {isRu
-              ? "Управление физическими портами, DSA мостами, тегами VLAN 802.1Q и протоколами"
-              : "Manage physical ports, DSA bridges, VLAN 802.1Q tags, and protocol settings"}
+              ? "Живой мониторинг логических интерфейсов netifd: состояние, адреса, трафик. Перезапуск интерфейса без перезагрузки роутера"
+              : "Live netifd logical interface monitoring: status, addresses, traffic. Restart an interface without rebooting the router"}
           </p>
         </div>
-        <Button variant="default" size="sm" className="text-xs gap-1.5 h-8">
-          <Plus className="h-3.5 w-3.5" />
-          <span>{isRu ? "Добавить интерфейс" : "Add New Interface"}</span>
-        </Button>
+        <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-mono">
+          <Network className="h-3.5 w-3.5" />
+          <span>netifd / ubus</span>
+        </div>
       </div>
+
+      {feedback && (
+        <div
+          className={`rounded-md border px-3 py-2 text-xs ${
+            feedback.error
+              ? "border-destructive/40 bg-destructive/10 text-destructive"
+              : "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+          }`}
+        >
+          {feedback.text}
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {ifaces?.map((iface) => {
@@ -88,9 +125,19 @@ export const Interfaces: React.FC = () => {
                   </span>
                 </div>
                 <div className="pt-2 flex justify-end gap-2">
-                  <Button variant="outline" size="sm" className="h-7 text-xs gap-1 border-border bg-background hover:bg-muted text-foreground">
-                    <Settings2 className="h-3 w-3 text-muted-foreground" />
-                    <span>{isRu ? "Настроить" : "Edit"}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busyIface === iface.interface}
+                    onClick={() => handleRestart(iface.interface)}
+                    className="h-7 text-xs gap-1 border-border bg-background hover:bg-muted text-foreground"
+                  >
+                    <RotateCw className={`h-3 w-3 text-muted-foreground ${busyIface === iface.interface ? "animate-spin" : ""}`} />
+                    <span>
+                      {busyIface === iface.interface
+                        ? (isRu ? "Перезапуск..." : "Restarting...")
+                        : (isRu ? "Перезапустить" : "Restart")}
+                    </span>
                   </Button>
                 </div>
               </CardContent>

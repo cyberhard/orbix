@@ -48,7 +48,7 @@ export const ConnectedClients: React.FC = () => {
     try {
       await stageChange({
         config: "dhcp",
-        section: `host_${lease.macaddr.replace(/:/g, "")}`,
+        section: `host_${lease.macaddr.toLowerCase().replace(/:/g, "")}`,
         option: "ip",
         oldValue: null,
         newValue: lease.ipaddr,

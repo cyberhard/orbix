@@ -168,7 +168,15 @@ export class ConfigImporter {
         }
 
         if (language) useI18nStore.getState().setLang(language);
-        if (theme) useThemeStore.getState().setTheme(theme);
+        if (theme) {
+          const resolvedTheme =
+            theme === "system"
+              ? window.matchMedia?.("(prefers-color-scheme: dark)").matches
+                ? "dark"
+                : "light"
+              : theme;
+          useThemeStore.getState().setTheme(resolvedTheme as "dark" | "light");
+        }
         if (operating_mode) usePolicyStore.getState().setOperatingMode(operating_mode);
       }
 

@@ -75,6 +75,7 @@ export interface NetworkInterfaceStatus {
   l3_device: string;
   proto: string;
   device?: string;
+  route?: Array<{ target?: string; nexthop?: string; device?: string; table?: number }>;
   "ipv4-address"?: Array<{ address: string; mask: number }>;
   "ipv6-address"?: Array<{ address: string; mask: number }>;
   "ipv6-prefix"?: Array<{ address: string; mask: number }>;
@@ -88,6 +89,9 @@ export interface NetworkInterfaceStatus {
       rx_errors?: number;
       tx_errors?: number;
     };
+    /** enriched by getInterfaces() from network.device status */
+    macaddr?: string;
+    speed?: number;
   };
 }
 
@@ -106,7 +110,11 @@ export interface WirelessDevice {
   channel?: number;
   frequency?: number;
   txpower?: number;
+  htmode?: string;
   band?: "2g" | "5g" | "6g";
+  /** luci-rpc getWirelessDevices() augments radios with their UCI section */
+  config?: Record<string, any>;
+  iwinfo?: Record<string, any>;
   interfaces: Array<{
     ifname: string;
     section: string;
@@ -117,11 +125,18 @@ export interface WirelessDevice {
     channel: number;
     signal?: number;
     noise?: number;
+    /** UCI key material joined by luci-rpc / getWirelessDevices enrichment */
+    key?: string;
+    config?: Record<string, any>;
+    iwinfo?: Record<string, any>;
     assoclist?: Record<string, {
       signal: number;
       noise: number;
       rx_rate: number;
       tx_rate: number;
+      key?: string;
+      macaddr?: string;
+      speed?: number;
     }>;
   }>;
 }
@@ -273,7 +288,7 @@ export interface SubscriptionMetadata {
   announce?: string;
   supportUrl?: string;
   lastUpdated: number;
-  nextUpdate: number;
+  nextUpdate?: number;
   autoUpdateInterval: "disabled" | "6h" | "12h" | "24h";
   selectionMode: "manual" | "auto_best";
 }
@@ -324,6 +339,7 @@ export interface VlessStatusResponse {
 export interface ZapretStatusResponse {
   running: boolean;
   enabled: boolean;
+  installed?: boolean;
   fwtype: string;
   mode_filter?: string;
   ports_tcp?: string;
@@ -369,3 +385,53 @@ export interface AwgStatusResponse {
   h4?: number;
 }
 
+
+export interface ZapretOptionsResponse {
+  installed: boolean;
+  running: boolean;
+  nfqws_enable: boolean;
+  ports_tcp: string;
+  ports_udp: string;
+  mode_filter: string;
+  run_on_boot: string;
+  fwtype: string;
+  nfqws_opt: string;
+  list_files: Array<{ name: string; path: string; size: number }>;
+  backups: string[];
+}
+
+export interface KidDevice {
+  mac: string;
+  ip: string;
+  name: string;
+  online: boolean;
+  paused: boolean;
+}
+
+export interface NodeBalancerStatusResponse {
+  status: string;
+  updated: number;
+  active_server: string;
+  active_port: string;
+  score: number;
+  scanned: number;
+  best: number;
+  switched: boolean;
+  message?: string;
+  sub_nodes: number;
+  log?: string[];
+}
+
+export interface KidStatusResponse {
+  status: string;
+  installed: boolean;
+  master: boolean;
+  effective: boolean;
+  auto_bedtime: boolean;
+  bedtime_start: string;
+  bedtime_end: string;
+  blocks: string[];
+  paused: string[];
+  devices: KidDevice[];
+  message?: string;
+}

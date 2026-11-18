@@ -18,33 +18,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Shield,
-  ShieldAlert,
-  ShieldCheck,
-  Globe,
-  Zap,
-  Key,
-  Plus,
-  RefreshCw,
-  Download,
-  Upload,
-  Trash2,
-  FileText,
-  CheckCircle2,
-  AlertCircle,
-  Copy,
-  Check,
-  Layers,
-  Lock,
-  Activity,
-  ArrowRight,
-  Sparkles,
-  SlidersHorizontal,
-  Power,
-  ChevronDown,
-  ChevronUp,
-} from "lucide-react";
+import { Shield, ShieldAlert, ShieldCheck, Globe, Key, Plus, RefreshCw, Download, Upload, Trash2, FileText, CheckCircle2, AlertCircle, Check, Layers, Lock, Sparkles, SlidersHorizontal } from "lucide-react";
+import NodeBalancerCard from "./NodeBalancerCard";
 import { formatBytes } from "@/lib/utils";
 import { VlessNode } from "@/types/ubus";
 
@@ -222,7 +197,7 @@ export const VpnManager: React.FC = () => {
     queryFn: () => ubusClient.getAwgConfig(),
   });
 
-  const isConfigured = Boolean(awgData?.configured || (awgData?.addresses && awgData.addresses.length > 0));
+  Boolean(awgData?.configured || (awgData?.addresses && awgData.addresses.length > 0));
   const isTunnelUp = Boolean(awgData?.active);
 
   // Editable parameters for AWG (Expert Mode)
@@ -424,9 +399,16 @@ export const VpnManager: React.FC = () => {
     }
   };
 
-  const handleDeleteVlessNode = (id: string, name: string) => {
-    setNodes((prev) => prev.filter((n) => n.id !== id));
-    showToast(isRu ? `Узел "${name}" удален` : `Node "${name}" deleted`);
+    const handleDeleteVlessNode = (_id: string, name: string) => {
+    // Nodes in this list mirror the router's live config (/etc/sing-box/*), so a local
+    // removal would silently reappear on refresh. Remove them from the router instead:
+    // switching the active outbound replaces the active node; stale outbounds disappear
+    // after the next policy apply regenerates the sing-box config.
+    showToast(
+      isRu
+        ? `Узел "${name}" отражает конфиг роутера и вернётся после обновления списка. Чтобы сменить активный туннель - выберите другой узел и нажмите «Активировать».`
+        : `Node "${name}" mirrors the router config and will reappear on refresh. To switch the active tunnel - pick another node and press "Activate".`
+    );
   };
 
   const handleClearAllNodes = () => {
@@ -474,17 +456,26 @@ export const VpnManager: React.FC = () => {
     }
   };
 
-  const handleGenerateKeypair = () => {
-    const priv = "Y" + Array.from({ length: 42 }, () => Math.random().toString(36)[2]).join("") + "=";
-    const pub = "K" + Array.from({ length: 42 }, () => Math.random().toString(36)[2]).join("") + "=";
-    navigator.clipboard?.writeText(`PrivateKey: ${priv}\nPublicKey: ${pub}`);
-    setCopiedKey(true);
-    setTimeout(() => setCopiedKey(false), 3000);
-    showToast(isRu ? "Ключи сгенерированы и скопированы в буфер обмена!" : "Keypair generated and copied to clipboard!");
+    const handleGenerateKeypair = async () => {
+    try {
+      const res = await ubusClient.awgGenkey();
+      navigator.clipboard?.writeText(`PrivateKey: ${res.private_key}\nPublicKey: ${res.public_key}`);
+      setCopiedKey(true);
+      setTimeout(() => setCopiedKey(false), 3000);
+      showToast(isRu ? "Пара ключей реально сгенерирована на роутере (wg/awg genkey) и скопирована" : "Keypair generated for real on the router (wg/awg genkey) and copied");
+    } catch (e: any) {
+      showToast(
+        isRu
+          ? `Не удалось сгенерировать ключи на роутере: ${e?.message || String(e)}. Вручную: wg genkey | tee privatekey | wg pubkey`
+          : `Router key generation failed: ${e?.message || String(e)}. Manually: wg genkey | tee privatekey | wg pubkey`
+      );
+    }
   };
 
-  const activeVless = nodes.find((n) => n.active);
-  const isAnyVpnActive = isTunnelUp || Boolean(activeVless);
+
+
+  nodes.find((n) => n.active);
+  
 
   const peer = awgData?.peers?.[0];
   const latestHandshakeSec = peer?.latest_handshake && peer.latest_handshake > 0
@@ -814,10 +805,6 @@ export const VpnManager: React.FC = () => {
               <Lock className="h-3.5 w-3.5 text-amber-400" />
               Kill Switch
             </TabsTrigger>
-            <TabsTrigger value="hysteria" className="text-xs gap-1.5 py-1.5">
-              <Zap className="h-3.5 w-3.5 text-yellow-400" />
-              Hysteria 2
-            </TabsTrigger>
           </TabsList>
 
           {/* ================= Tab 1: AmneziaWG ================= */}
@@ -982,14 +969,11 @@ export const VpnManager: React.FC = () => {
                       <Key className="h-3.5 w-3.5" />
                       {copiedKey ? (isRu ? "Скопировано!" : "Copied!") : t.vpn.generateKeypair}
                     </Button>
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => showToast(isRu ? "Параметры AWG сохранены" : "AWG settings saved")}
-                      className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-medium"
-                    >
-                      {t.vpn.saveAwg}
-                    </Button>
+                    <span className="text-[10px] text-muted-foreground max-w-[220px] text-right">
+                      {isRu
+                        ? "Эти параметры подставляются в экспорт .conf. Серверный AWG настраивается импортом профиля."
+                        : "These values feed the .conf export template. The server-side AWG is configured via profile import."}
+                    </span>
                   </div>
                 </CardContent>
               </Card>
@@ -1078,6 +1062,7 @@ export const VpnManager: React.FC = () => {
 
           {/* ================= Tab 2: Sing-box Reality (VLESS, flow, shortId, fingerprint) ================= */}
           <TabsContent value="vless" className="space-y-4">
+              <NodeBalancerCard />
             <Card className="border-zinc-800 bg-zinc-950 shadow-xl">
               <CardHeader className="pb-3 border-b border-zinc-800">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1393,57 +1378,7 @@ export const VpnManager: React.FC = () => {
           </TabsContent>
 
           {/* ================= Tab 5: Hysteria 2 ================= */}
-          <TabsContent value="hysteria" className="space-y-4">
-            <Card className="border-zinc-800 bg-zinc-950 shadow-xl">
-              <CardHeader className="pb-3 border-b border-zinc-800">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <Zap className="h-4 w-4 text-amber-400" />
-                  <span>{t.vpn.hysteriaTitle}</span>
-                </CardTitle>
-                <CardDescription className="text-xs text-zinc-400">{t.vpn.hysteriaDesc}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4 pt-4 text-xs">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <label className="text-zinc-400">{t.vpn.serverAddr}</label>
-                    <Input defaultValue="198.51.100.33" className="font-mono text-xs bg-zinc-900 border-zinc-800" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-zinc-400">{t.vpn.portHopping}</label>
-                    <Input defaultValue="8443 (hopping: 20000-40000)" className="font-mono text-xs bg-zinc-900 border-zinc-800" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-zinc-400">{t.vpn.authSecret}</label>
-                    <Input type="password" defaultValue="secret_hysteria_auth_token" className="font-mono text-xs bg-zinc-900 border-zinc-800" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-zinc-400">{t.vpn.obfsPassword}</label>
-                    <Input defaultValue="obfs_salamander_key" className="font-mono text-xs bg-zinc-900 border-zinc-800" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-zinc-400">{t.vpn.upLimit}</label>
-                    <Input defaultValue="100" type="number" className="font-mono text-xs bg-zinc-900 border-zinc-800" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-zinc-400">{t.vpn.downLimit}</label>
-                    <Input defaultValue="500" type="number" className="font-mono text-xs bg-zinc-900 border-zinc-800" />
-                  </div>
-                </div>
-
-                <div className="flex justify-end pt-2">
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => showToast(isRu ? "Настройки Hysteria 2 сохранены" : "Hysteria 2 settings saved")}
-                    className="text-xs bg-amber-600 hover:bg-amber-500 text-white font-medium"
-                  >
-                    {t.vpn.saveHysteria}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+          </Tabs>
       )}
 
       {/* ================= Modal: Import AmneziaWG .conf ================= */}

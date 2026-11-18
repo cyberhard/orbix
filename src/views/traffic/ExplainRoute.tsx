@@ -1,5 +1,7 @@
 // Explain Route - Intelligent Diagnostic Decision Engine
 import React, { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { ubusClient } from "@/lib/ubus-client";
 import { usePolicyStore } from "@/store/policy-store";
 import { useI18nStore } from "@/store/i18n-store";
 import { routeEvaluator } from "@/services/policy-engine/evaluator";
@@ -7,20 +9,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Search,
-  CheckCircle2,
-  AlertTriangle,
-  ArrowRight,
-  Shield,
-  Zap,
-  Globe,
-  Radio,
-  HelpCircle,
-  Activity,
-  Layers,
-  Info,
-} from "lucide-react";
+import { Search, CheckCircle2, AlertTriangle, Shield, Zap, Globe, HelpCircle, Activity, FlaskConical, Info} from "lucide-react";
 import { RouteEvaluationResult } from "@/services/policy-engine/types";
 
 export const ExplainRoute: React.FC = () => {
@@ -28,15 +17,32 @@ export const ExplainRoute: React.FC = () => {
   const isRu = language === "ru";
   const { policies } = usePolicyStore();
 
-  const [target, setTarget] = useState("youtube.com");
-  const [sourceIp, setSourceIp] = useState("192.168.1.130");
-  const [result, setResult] = useState<RouteEvaluationResult>(
-    routeEvaluator.evaluate("youtube.com", "192.168.1.130", "tcp", 443, policies)
-  );
+  const { data: leases } = useQuery({
+    queryKey: ["connected-clients"],
+    queryFn: () => ubusClient.getDhcpLeases(),
+    staleTime: 30000,
+  });
 
-  const handleEvaluate = (tgt = target, src = sourceIp) => {
+  const firstIp = leases && leases.length > 0 ? leases[0].ipaddr : "";
+  const [target, setTarget] = useState("youtube.com");
+  const [sourceIp, setSourceIp] = useState("");
+  const effectiveSrc = sourceIp || firstIp;
+
+  const initialResult = React.useMemo(
+    () => routeEvaluator.evaluate("youtube.com", firstIp || "0.0.0.0", "tcp", 443, policies),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [firstIp]
+  );
+  const [result, setResult] = useState<RouteEvaluationResult>(initialResult);
+
+  React.useEffect(() => {
+    setResult(routeEvaluator.evaluate(target, effectiveSrc || "0.0.0.0", "tcp", 443, policies));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveSrc]);
+
+  const handleEvaluate = (tgt = target, src = effectiveSrc) => {
     if (!tgt.trim()) return;
-    const res = routeEvaluator.evaluate(tgt.trim(), src.trim(), "tcp", 443, policies);
+    const res = routeEvaluator.evaluate(tgt.trim(), (src || "0.0.0.0").trim(), "tcp", 443, policies);
     setResult(res);
   };
 
@@ -64,6 +70,16 @@ export const ExplainRoute: React.FC = () => {
         </p>
       </div>
 
+      {/* Honest scope banner: this evaluates the panel's local policy store, not the router kernel */}
+      <div className="p-3 rounded-lg border border-amber-800/50 bg-amber-950/20 text-amber-300/90 text-[11px] flex items-start gap-2">
+        <FlaskConical className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+        <span>
+          {isRu
+            ? "Это симулятор панели: он объясняет, как трафик пойдёт согласно СПИСКУ ПОЛИТИК в браузере (черновику), а не согласно ядру роутера. Реальный маршрут с роутера проверяется в разделе PBR → «Проверка маршрута» (ip route get + nfqws)."
+            : "This is a panel-side simulator: it explains routing per the browser-side policy draft, not the router kernel. For the real path use PBR → Route Checker (ip route get + nfqws on the router)."}
+        </span>
+      </div>
+
       {/* Target Input Card */}
       <Card className="border-zinc-800 bg-zinc-950 shadow-md">
         <CardContent className="pt-4 space-y-4">
@@ -81,11 +97,19 @@ export const ExplainRoute: React.FC = () => {
 
             <div className="w-full sm:w-56">
               <Input
-                value={sourceIp}
+                list="explain-route-devices"
+                value={sourceIp || firstIp}
                 onChange={(e) => setSourceIp(e.target.value)}
-                placeholder="Source Device IP (e.g. 192.168.1.130)"
+                placeholder={leases && leases.length > 0 ? (isRu ? "Устройство из сети" : "Pick a device") : (isRu ? "IP устройства" : "Source device IP")}
                 className="h-9 text-xs font-mono bg-zinc-900 border-zinc-800 text-zinc-100"
               />
+              <datalist id="explain-route-devices">
+                {(leases || []).map((l) => (
+                  <option key={l.ipaddr} value={l.ipaddr}>
+                    {l.hostname}
+                  </option>
+                ))}
+              </datalist>
             </div>
 
             <Button
@@ -242,7 +266,7 @@ export const ExplainRoute: React.FC = () => {
               {isRu ? "Оценка цепочки совпадений политик" : "Policy Evaluation Order & Matched Candidates"}
             </h4>
             <div className="space-y-1.5">
-              {result.matchedPolicies.map((m, idx) => (
+              {result.matchedPolicies.map((m, _idx) => (
                 <div
                   key={m.policy.id}
                   className={`p-2.5 rounded-lg border text-xs flex items-center justify-between ${

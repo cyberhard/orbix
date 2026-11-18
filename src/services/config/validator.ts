@@ -1,13 +1,6 @@
 // Strict JSON Schema and Content Validator for ORBIX Configs
 
-import {
-  CURRENT_SCHEMA_VERSION,
-  ORBIX_FORMAT_IDENTIFIER,
-  LEGACY_PANEL_FORMAT_IDENTIFIER,
-  PANEL_FORMAT_IDENTIFIER,
-  PanelExportPackage,
-  PanelConfiguration,
-} from "./schema";
+import { CURRENT_SCHEMA_VERSION, ORBIX_FORMAT_IDENTIFIER, LEGACY_PANEL_FORMAT_IDENTIFIER, PanelExportPackage, PanelConfiguration } from "./schema";
 
 export interface ValidationResult {
   isValid: boolean;
@@ -70,7 +63,7 @@ export class ConfigValidator {
         errors,
         warnings,
         sectionsFound: pkg.metadata?.included_sections || [],
-        schemaVersion,
+        schemaVersion: schemaVersion ?? 1,
         isEncrypted: true,
         sourceDevice: pkg.source?.model,
         sourceOpenWrt: pkg.source?.openwrt_version,
@@ -85,7 +78,7 @@ export class ConfigValidator {
         errors,
         warnings,
         sectionsFound: [],
-        schemaVersion,
+        schemaVersion: schemaVersion ?? 1,
         isEncrypted: false,
       };
     }
@@ -174,7 +167,7 @@ export class ConfigValidator {
       errors,
       warnings,
       sectionsFound,
-      schemaVersion,
+      schemaVersion: schemaVersion ?? 1,
       isEncrypted: false,
       sourceDevice: pkg.source?.model,
       sourceOpenWrt: pkg.source?.openwrt_version,
