@@ -222,6 +222,8 @@ else
 					"awg_status",
 					"zapret_status",
 					"zapret_test_strategy",
+					"zapret_get_options",
+					"zapret_list_files",
 					"vless_status",
 					"singbox_test_node",
 					"podkop_status",
@@ -229,16 +231,31 @@ else
 					"pbr_trace",
 					"killswitch_status",
 					"sub_get_cache",
-					"policy_status"
+					"policy_status",
+					"kid_status",
+					"node_balancer_status",
+					"zapret_flowoff_status",
+					"zapret_auto_status",
+					"watchdog_status",
+					"tiers_status",
+					"tiers_get"
 				]
 			}
 		},
 		"write": {
 			"ubus": {
+				"network.interface.*": [
+					"restart"
+				],
 				"circumvention": [
+					"sub_get_cache",
 					"awg_genkey",
 					"awg_import_conf",
 					"awg_delete",
+					"zapret_set_options",
+					"zapret_import_chunk",
+					"zapret_import_profile",
+					"zapret_restore_backup",
 					"podkop_update",
 					"arm_rollback",
 					"confirm_rollback",
@@ -246,16 +263,34 @@ else
 					"sub_decrypt_fetch",
 					"singbox_set_outbound",
 					"pbr_set_device_rule",
+					"pbr_rule_upsert",
+					"pbr_rule_delete",
 					"wifi_reload",
 					"killswitch_set",
 					"sub_save_cache",
 					"policy_apply",
-					"run_cmd"
+					"run_cmd",
+					"kid_set_master",
+					"kid_set_device",
+					"kid_set_block",
+					"kid_set_bedtime",
+					"node_balancer_run",
+					"sub_refresh",
+					"sub_set_source",
+					"zapret_flowoff_fix",
+					"zapret_ports_sync",
+					"zapret_auto_test",
+					"zaptest_stop",
+					"watchdog_set",
+					"tiers_stage",
+					"tiers_commit",
+					"tiers_disable"
 				]
 			}
 		}
 	}
 }
+
 EOF
 fi
 

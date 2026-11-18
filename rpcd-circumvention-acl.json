@@ -21,7 +21,9 @@
 					"node_balancer_status",
 					"zapret_flowoff_status",
 					"zapret_auto_status",
-					"watchdog_status"
+					"watchdog_status",
+					"tiers_status",
+					"tiers_get"
 				]
 			}
 		},
@@ -64,7 +66,10 @@
 					"zapret_ports_sync",
 					"zapret_auto_test",
 					"zaptest_stop",
-					"watchdog_set"
+					"watchdog_set",
+					"tiers_stage",
+					"tiers_commit",
+					"tiers_disable"
 				]
 			}
 		}
