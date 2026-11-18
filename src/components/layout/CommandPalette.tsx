@@ -89,9 +89,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ onSelectRoute, i
     { id: "dns", title: t.nav.dnsCenter, category: t.nav.network, icon: <Globe className="h-4 w-4" />, keywords: "dns upstreams leak защита утечки routing", action: () => onSelectRoute("dhcp?tab=dns") },
     { id: "firewall", title: t.nav.firewall, category: t.nav.network, icon: <Shield className="h-4 w-4" />, keywords: "firewall fw4 nftables порты", action: () => onSelectRoute("firewall") },
     // Система
+    { id: "logs", title: t.nav.systemLogs, category: t.nav.system, icon: <Terminal className="h-4 w-4" />, keywords: "logs logread логи syslog", action: () => onSelectRoute("diagnostics?tab=logs") },
     { id: "diagnostics", title: t.nav.diagnosticsLogs, category: t.nav.system, icon: <Terminal className="h-4 w-4" />, keywords: "diagnostics ping traceroute nslookup утилиты", action: () => onSelectRoute("diagnostics?tab=tools") },
     { id: "explain", title: t.nav.explainRoute, category: t.nav.system, icon: <Terminal className="h-4 w-4" />, keywords: "explain why route почему маршрут", action: () => onSelectRoute("diagnostics?tab=explain") },
-    { id: "logs", title: t.nav.systemLogs, category: t.nav.system, icon: <Terminal className="h-4 w-4" />, keywords: "logs logread логи syslog", action: () => onSelectRoute("diagnostics?tab=logs") },
     { id: "services", title: t.nav.servicesTasks, category: t.nav.system, icon: <Cpu className="h-4 w-4" />, keywords: "services init автозапуск", action: () => onSelectRoute("services") },
     { id: "tasks", title: t.nav.scheduledTasks, category: t.nav.system, icon: <Cpu className="h-4 w-4" />, keywords: "tasks cron crontab планировщик", action: () => onSelectRoute("services?tab=cron") },
     { id: "software", title: t.nav.softwarePackages, category: t.nav.system, icon: <Package className="h-4 w-4" />, keywords: "software packages apk opkg пакеты", action: () => onSelectRoute("software") },
